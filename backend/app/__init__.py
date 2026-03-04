@@ -2,6 +2,7 @@ from flask import Flask
 from .extensions import db, migrate, bcrypt, jwt, mail, cors
 from .config.settings import Config
 
+
 def create_app():
     app = Flask(
         __name__,
@@ -17,6 +18,14 @@ def create_app():
     jwt.init_app(app)
     mail.init_app(app)
     cors.init_app(app)
+
+    # ── Import all models so Flask-Migrate can detect them ────
+    from .models import (
+        User, PasswordResetToken, Address, Category,
+        Product, ProductVariant, ProductImage,
+        Cart, CartItem, Order, OrderItem,
+        Payment, Review, Banner, ShippingRule
+    )
 
     # Register blueprints
     from .routes.auth       import auth_bp
