@@ -5,7 +5,7 @@ class OrderItem(db.Model):
     __tablename__ = "order_items"
 
     # ── Primary Key ───────────────────────────────────────────
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # ── Foreign Keys ──────────────────────────────────────────
     order_id = db.Column(

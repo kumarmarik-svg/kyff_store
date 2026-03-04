@@ -10,7 +10,7 @@ class Category(db.Model):
         db.Integer,
         primary_key=True,
         autoincrement=True,
-        unsigned=True
+        
     )
 
     # ── Self-Referencing Foreign Key ──────────────────────────

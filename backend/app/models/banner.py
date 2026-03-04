@@ -6,7 +6,7 @@ class Banner(db.Model):
     __tablename__ = "banners"
 
     # ── Primary Key ───────────────────────────────────────────
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # ── Core Fields ───────────────────────────────────────────
     title = db.Column(

@@ -10,7 +10,7 @@ class PasswordResetToken(db.Model):
         db.Integer,
         primary_key=True,
         autoincrement=True,
-        unsigned=True
+        
     )
 
     # ── Foreign Key ───────────────────────────────────────────

@@ -6,7 +6,7 @@ class Cart(db.Model):
     __tablename__ = "cart"
 
     # ── Primary Key ───────────────────────────────────────────
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # ── Foreign Key ───────────────────────────────────────────
     user_id = db.Column(

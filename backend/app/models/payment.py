@@ -6,7 +6,7 @@ class Payment(db.Model):
     __tablename__ = "payments"
 
     # ── Primary Key ───────────────────────────────────────────
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # ── Foreign Key ───────────────────────────────────────────
     order_id = db.Column(

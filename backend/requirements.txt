@@ -27,3 +27,5 @@ Flask-Cors==4.0.1
 # ── Utils ─────────────────────────────────
 Pillow==10.4.0
 python-slugify==8.0.4
+
+anthropic>=0.20.0

@@ -6,7 +6,7 @@ class ProductImage(db.Model):
     __tablename__ = "product_images"
 
     # Primary Key
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # Foreign Key
     product_id = db.Column(

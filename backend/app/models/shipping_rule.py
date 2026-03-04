@@ -6,7 +6,7 @@ class ShippingRule(db.Model):
     __tablename__ = "shipping_rules"
 
     # ── Primary Key ───────────────────────────────────────────
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # ── Core Fields ───────────────────────────────────────────
     name = db.Column(

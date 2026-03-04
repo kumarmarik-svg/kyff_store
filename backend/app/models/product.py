@@ -6,7 +6,7 @@ class Product(db.Model):
     __tablename__ = "products"
 
     # Primary Key
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # Foreign Key
     category_id = db.Column(

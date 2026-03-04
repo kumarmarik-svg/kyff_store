@@ -6,7 +6,7 @@ class Review(db.Model):
     __tablename__ = "reviews"
 
     # ── Primary Key ───────────────────────────────────────────
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, unsigned=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, )
 
     # ── Foreign Keys ──────────────────────────────────────────
     product_id = db.Column(
