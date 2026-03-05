@@ -33,6 +33,7 @@ def _get_or_create_cart(user_id=None, session_token=None):
     """
     if user_id:
         cart = Cart.query.filter_by(user_id=user_id).first()
+        
         if not cart:
             cart = Cart(user_id=user_id)
             db.session.add(cart)
@@ -72,6 +73,8 @@ def _cart_response(cart):
 
         if not variant or not product:
             continue
+
+        print(f"DEBUG image_url → {product.primary_image()}")
 
         items_data.append({
             "cart_item_id":  item.id,

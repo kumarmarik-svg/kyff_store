@@ -1,0 +1,802 @@
+{% extends "admin/base.html" %}
+{% set active_page = "products" %}
+
+{% block content %}
+
+<div class="admin-page-header">
+    <h1>Products</h1>
+    <button class="btn btn-primary" onclick="openProductModal()">
+        <i class="ph ph-plus"></i> Add Product
+    </button>
+</div>
+
+<!-- Search -->
+<div style="margin-bottom:var(--space-6)">
+    <input type="search" class="form-input" id="product-search"
+           placeholder="Search products..."
+           style="max-width:360px"
+           oninput="debounce(loadProducts,400)()">
+</div>
+
+<!-- Table -->
+<div class="admin-table-wrapper">
+    <div style="overflow-x:auto">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Category</th>
+                    <th>Base Price</th>
+                    <th>Variants</th>
+                    <th>Images</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="products-tbody">
+                <tr><td colspan="7" style="text-align:center; padding:var(--space-8)">
+                    <div class="spinner" style="margin:0 auto"></div>
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="pagination" id="products-pag" style="margin-top:var(--space-6)"></div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     ADD / EDIT PRODUCT MODAL
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="product-modal">
+    <div class="modal" style="max-width:680px">
+        <div class="modal-header">
+            <h3 id="product-modal-title">Add Product</h3>
+            <button class="modal-close" onclick="closeProductModal()">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+
+        <div class="modal-body" style="max-height:75vh; overflow-y:auto;
+             display:flex; flex-direction:column; gap:var(--space-5)">
+
+            <!-- ── Basic Info ── -->
+            <div>
+                <h4 class="section-label">Basic Info</h4>
+                <div style="display:grid; grid-template-columns:1fr 1fr;
+                            gap:var(--space-4)">
+                    <div class="form-group" style="margin-bottom:0">
+                        <label class="form-label">
+                            Name (English) <span class="required">*</span>
+                        </label>
+                        <input type="text" class="form-input" id="p-name"
+                               placeholder="e.g. Foxtail Millet">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0">
+                        <label class="form-label">Name (Tamil)</label>
+                        <input type="text" class="form-input" id="p-name-ta"
+                               placeholder="தினை">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Category ── -->
+            <div>
+                <h4 class="section-label">Category</h4>
+                <div style="display:flex; gap:var(--space-3); align-items:flex-end">
+                    <div class="form-group" style="margin-bottom:0; flex:1">
+                        <label class="form-label">
+                            Select Category <span class="required">*</span>
+                        </label>
+                        <select class="form-select" id="p-category">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline btn-sm"
+                            style="flex-shrink:0; margin-bottom:1px"
+                            onclick="toggleNewCategory()">
+                        <i class="ph ph-plus"></i> New
+                    </button>
+                </div>
+
+                <!-- New Category Inline Form -->
+                <div id="new-category-form"
+                     style="display:none; margin-top:var(--space-3);
+                            padding:var(--space-4); background:var(--color-bg-light);
+                            border-radius:var(--radius-md);
+                            border:1px solid var(--color-border)">
+                    <div style="display:grid; grid-template-columns:1fr 1fr auto;
+                                gap:var(--space-3); align-items:flex-end">
+                        <div class="form-group" style="margin-bottom:0">
+                            <label class="form-label">Category Name</label>
+                            <input type="text" class="form-input" id="new-cat-name"
+                                   placeholder="e.g. Herbal Teas">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0">
+                            <label class="form-label">Tamil Name</label>
+                            <input type="text" class="form-input" id="new-cat-name-ta"
+                                   placeholder="மூலிகை தேநீர்">
+                        </div>
+                        <button class="btn btn-primary btn-sm"
+                                onclick="createCategory()">
+                            Create
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Description ── -->
+            <div>
+                <h4 class="section-label">Description</h4>
+                <div class="form-group" style="margin-bottom:var(--space-3)">
+                    <label class="form-label">Short Description</label>
+                    <input type="text" class="form-input" id="p-short-desc"
+                           placeholder="One-line summary shown on product card">
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">Full Description</label>
+                    <textarea class="form-textarea" id="p-description"
+                              rows="3"
+                              placeholder="Detailed product description..."></textarea>
+                </div>
+            </div>
+
+            <!-- ── Source ── -->
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">
+                    <i class="ph ph-plant"></i> Farmer / Source Info
+                </label>
+                <input type="text" class="form-input" id="p-source"
+                       placeholder="e.g. Grown by Ramu, Thanjavur">
+            </div>
+
+            <!-- ── Flags ── -->
+            <div style="display:flex; gap:var(--space-6)">
+                <label class="filter-option" style="font-size:var(--text-sm)">
+                    <input type="checkbox" id="p-featured"> Featured
+                </label>
+                <label class="filter-option" style="font-size:var(--text-sm)">
+                    <input type="checkbox" id="p-active" checked> Active
+                </label>
+            </div>
+
+            <hr class="divider">
+
+            <!-- ── Variants ── -->
+            <div>
+                <h4 class="section-label">Variants / SKUs</h4>
+                <div style="display:grid;
+                            grid-template-columns:2fr 1fr 1fr 1fr 36px;
+                            gap:var(--space-2); margin-bottom:var(--space-2)">
+                    <span style="font-size:var(--text-xs);
+                                 color:var(--color-text-muted)">Label</span>
+                    <span style="font-size:var(--text-xs);
+                                 color:var(--color-text-muted)">Price ₹</span>
+                    <span style="font-size:var(--text-xs);
+                                 color:var(--color-text-muted)">Sale ₹</span>
+                    <span style="font-size:var(--text-xs);
+                                 color:var(--color-text-muted)">Stock</span>
+                    <span></span>
+                </div>
+                <div id="variants-list"></div>
+                <button class="btn btn-ghost btn-sm"
+                        style="margin-top:var(--space-2)"
+                        onclick="addVariantRow()">
+                    <i class="ph ph-plus"></i> Add Variant
+                </button>
+            </div>
+
+            <hr class="divider">
+
+            <!-- ── Images ── -->
+            <div id="images-section">
+                <h4 class="section-label">Product Images</h4>
+
+                <!-- Existing images (edit mode) -->
+                <div id="existing-images"
+                     style="display:flex; flex-wrap:wrap; gap:var(--space-3);
+                            margin-bottom:var(--space-4)">
+                    <!-- Populated in edit mode -->
+                </div>
+
+                <!-- Upload Area -->
+                <div id="upload-area"
+                     style="border:2px dashed var(--color-border);
+                            border-radius:var(--radius-lg); padding:var(--space-6);
+                            text-align:center; cursor:pointer; transition:all 0.2s"
+                     onclick="document.getElementById('image-file-input').click()"
+                     ondragover="handleDragOver(event)"
+                     ondrop="handleDrop(event)">
+                    <i class="ph ph-upload-simple"
+                       style="font-size:2rem; color:var(--color-text-muted)"></i>
+                    <p style="margin:var(--space-2) 0 0; font-size:var(--text-sm);
+                               color:var(--color-text-muted)">
+                        Click to upload or drag & drop images here
+                    </p>
+                    <p style="font-size:var(--text-xs); color:var(--color-text-muted);
+                               margin-top:4px">
+                        JPG, PNG, WEBP — Multiple files allowed
+                    </p>
+                    <input type="file" id="image-file-input"
+                           multiple accept=".jpg,.jpeg,.png,.webp"
+                           style="display:none"
+                           onchange="handleImageSelect(this.files)">
+                </div>
+
+                <!-- Image Preview Queue -->
+                <div id="image-preview-queue"
+                     style="display:flex; flex-wrap:wrap; gap:var(--space-3);
+                            margin-top:var(--space-4)">
+                    <!-- Previews shown here before upload -->
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeProductModal()">
+                Cancel
+            </button>
+            <button class="btn btn-primary" onclick="saveProduct()"
+                    id="save-product-btn">
+                <i class="ph ph-floppy-disk"></i> Save Product
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_css %}
+<style>
+.section-label {
+    font-family  : var(--font-body);
+    font-size    : var(--text-sm);
+    font-weight  : var(--weight-semibold);
+    color        : var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-3);
+}
+
+.image-thumb {
+    position      : relative;
+    width         : 80px;
+    height        : 80px;
+    border-radius : var(--radius-md);
+    overflow      : hidden;
+    border        : 2px solid var(--color-border);
+    flex-shrink   : 0;
+}
+
+.image-thumb img {
+    width      : 100%;
+    height     : 100%;
+    object-fit : cover;
+}
+
+.image-thumb .delete-img {
+    position   : absolute;
+    top        : 2px;
+    right      : 2px;
+    background : rgba(0,0,0,0.6);
+    color      : white;
+    border     : none;
+    border-radius: 50%;
+    width      : 20px;
+    height     : 20px;
+    cursor     : pointer;
+    font-size  : 12px;
+    display    : flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-thumb .upload-progress {
+    position   : absolute;
+    bottom     : 0;
+    left       : 0;
+    right      : 0;
+    height     : 4px;
+    background : var(--color-primary);
+    transition : width 0.3s;
+}
+
+#upload-area:hover {
+    border-color     : var(--color-primary);
+    background       : var(--color-bg-light);
+}
+
+#upload-area.drag-over {
+    border-color     : var(--color-primary);
+    background       : var(--color-primary-xlight);
+}
+</style>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ══════════════════════════════════════════════════════════
+   ADMIN PRODUCTS PAGE JS
+   ══════════════════════════════════════════════════════════ */
+
+let editingProductId = null;
+let currentPage      = 1;
+let categories       = [];
+let pendingImages    = []; // Files queued for upload after save
+
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    loadProducts();
+    loadCategories();
+});
+
+
+// ── Debounce ───────────────────────────────────────────────
+function debounce(fn, delay) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+
+
+// ── Load Categories ────────────────────────────────────────
+async function loadCategories() {
+    try {
+        const res  = await API.get('/api/categories/');
+        categories = res.data?.categories || [];
+        populateCategorySelect();
+    } catch (e) {}
+}
+
+function populateCategorySelect() {
+    const sel = document.getElementById('p-category');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Select Category --</option>';
+    categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value       = c.id;
+        opt.textContent = c.name;
+        if (c.id == current) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+
+// ── Load Products ──────────────────────────────────────────
+async function loadProducts() {
+    const search = document.getElementById('product-search').value.trim();
+    const params = new URLSearchParams({ page: currentPage, per_page: 15 });
+    if (search) params.set('q', search);
+
+    try {
+        const res      = await API.get(`/api/admin/products?${params}`);
+        const products = res.data?.products || [];
+        const tbody    = document.getElementById('products-tbody');
+
+        if (products.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7"
+                style="text-align:center; color:var(--color-text-muted);
+                       padding:var(--space-8)">
+                No products found</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = products.map(p => `
+            <tr>
+                <td>
+                    <div style="display:flex; align-items:center; gap:var(--space-3)">
+                        <img src="${p.images?.[0]?.image_url || '/static/images/placeholder.png'}"
+                             style="width:44px; height:44px; object-fit:cover;
+                                    border-radius:var(--radius-sm); flex-shrink:0"
+                             onerror="this.src='/static/images/placeholder.png'">
+                        <div>
+                            <div style="font-weight:var(--weight-medium)">${p.name}</div>
+                            ${p.name_ta ? `<div style="font-size:var(--text-xs);
+                                color:var(--color-text-muted)">${p.name_ta}</div>` : ''}
+                        </div>
+                    </div>
+                </td>
+                <td style="font-size:var(--text-sm)">${p.category?.name || '—'}</td>
+                <td>₹${parseFloat(p.base_price).toFixed(2)}</td>
+                <td>${p.variants?.length || 0}</td>
+                <td>
+                    <span style="font-size:var(--text-sm)">
+                        ${p.images?.length || 0} image${p.images?.length !== 1 ? 's' : ''}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge ${p.is_active ? 'badge-success' : 'badge-error'}">
+                        ${p.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    ${p.is_featured ? `<span class="badge badge-primary"
+                        style="margin-left:4px">⭐</span>` : ''}
+                </td>
+                <td>
+                    <div class="admin-table-actions">
+                        <button class="btn btn-outline btn-sm"
+                                onclick="editProduct(${p.id})">
+                            <i class="ph ph-pencil"></i> Edit
+                        </button>
+                        <button class="btn btn-ghost btn-sm"
+                                style="color:var(--color-error)"
+                                onclick="deleteProduct(${p.id}, '${p.name}')">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (e) {
+        showToast('Failed to load products', 'error');
+    }
+}
+
+
+// ── Open Product Modal ─────────────────────────────────────
+function openProductModal(product = null) {
+    editingProductId = product ? product.id : null;
+    pendingImages    = [];
+
+    document.getElementById('product-modal-title').textContent =
+        product ? 'Edit Product' : 'Add Product';
+
+    // Reset fields
+    document.getElementById('p-name').value        = product?.name         || '';
+    document.getElementById('p-name-ta').value     = product?.name_ta      || '';
+    document.getElementById('p-short-desc').value  = product?.short_desc   || '';
+    document.getElementById('p-description').value = product?.description  || '';
+    document.getElementById('p-source').value      = product?.source_info  || '';
+    document.getElementById('p-featured').checked  = product?.is_featured  || false;
+    document.getElementById('p-active').checked    = product?.is_active    ?? true;
+
+    // Category
+    if (product?.category_id) {
+        document.getElementById('p-category').value = product.category_id;
+    } else {
+        document.getElementById('p-category').value = '';
+    }
+
+    // Variants
+    const varList = document.getElementById('variants-list');
+    varList.innerHTML = '';
+    if (product?.variants?.length > 0) {
+        product.variants.forEach(v => addVariantRow(v));
+    } else {
+        addVariantRow();
+    }
+
+    // Existing images
+    const existingEl = document.getElementById('existing-images');
+    existingEl.innerHTML = '';
+    if (product?.images?.length > 0) {
+        product.images.forEach(img => {
+            existingEl.appendChild(createExistingImageThumb(img));
+        });
+    }
+
+    // Clear preview queue
+    document.getElementById('image-preview-queue').innerHTML = '';
+
+    // Reset new category form
+    document.getElementById('new-category-form').style.display = 'none';
+    document.getElementById('new-cat-name').value    = '';
+    document.getElementById('new-cat-name-ta').value = '';
+
+    document.getElementById('product-modal').classList.add('open');
+    document.getElementById('p-name').focus();
+}
+
+
+// ── Close Product Modal ────────────────────────────────────
+function closeProductModal() {
+    document.getElementById('product-modal').classList.remove('open');
+    document.body.style.overflow = '';
+    pendingImages = [];
+}
+
+
+// ── Existing Image Thumb ───────────────────────────────────
+function createExistingImageThumb(img) {
+    const div = document.createElement('div');
+    div.className = 'image-thumb';
+    div.id = `existing-img-${img.id}`;
+    div.innerHTML = `
+        <img src="${img.image_url}" alt="${img.alt_text || ''}"
+             onerror="this.src='/static/images/placeholder.png'">
+        <button class="delete-img"
+                onclick="deleteExistingImage(${img.id})"
+                title="Remove image">✕</button>
+    `;
+    return div;
+}
+
+
+// ── Delete Existing Image ──────────────────────────────────
+async function deleteExistingImage(imageId) {
+    if (!confirm('Remove this image?')) return;
+    try {
+        await API.delete(`/api/admin/products/images/${imageId}`);
+        const el = document.getElementById(`existing-img-${imageId}`);
+        if (el) el.remove();
+        showToast('Image removed');
+    } catch (err) {
+        showToast(err.message || 'Failed to remove image', 'error');
+    }
+}
+
+
+// ── Handle Image File Select ───────────────────────────────
+function handleImageSelect(files) {
+    Array.from(files).forEach(file => {
+        if (!['image/jpeg','image/png','image/webp'].includes(file.type)) {
+            showToast(`${file.name} — invalid file type`, 'warning');
+            return;
+        }
+        addImagePreview(file);
+        pendingImages.push(file);
+    });
+}
+
+
+// ── Add Image Preview ──────────────────────────────────────
+function addImagePreview(file) {
+    const queue = document.getElementById('image-preview-queue');
+    const idx   = pendingImages.length; // current index
+
+    const div = document.createElement('div');
+    div.className = 'image-thumb';
+    div.id        = `preview-${idx}`;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        div.innerHTML = `
+            <img src="${e.target.result}" alt="${file.name}">
+            <button class="delete-img"
+                    onclick="removePreview(${idx})"
+                    title="Remove">✕</button>
+            <div class="upload-progress" id="progress-${idx}"
+                 style="width:0%"></div>
+        `;
+    };
+    reader.readAsDataURL(file);
+    queue.appendChild(div);
+}
+
+
+// ── Remove Preview ─────────────────────────────────────────
+function removePreview(idx) {
+    pendingImages.splice(idx, 1);
+    const el = document.getElementById(`preview-${idx}`);
+    if (el) el.remove();
+}
+
+
+// ── Drag & Drop ────────────────────────────────────────────
+function handleDragOver(event) {
+    event.preventDefault();
+    document.getElementById('upload-area').classList.add('drag-over');
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    document.getElementById('upload-area').classList.remove('drag-over');
+    handleImageSelect(event.dataTransfer.files);
+}
+
+
+// ── Toggle New Category Form ───────────────────────────────
+function toggleNewCategory() {
+    const form = document.getElementById('new-category-form');
+    const isHidden = form.style.display === 'none';
+    form.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) document.getElementById('new-cat-name').focus();
+}
+
+
+// ── Create Category on the fly ─────────────────────────────
+async function createCategory() {
+    const name   = document.getElementById('new-cat-name').value.trim();
+    const nameTa = document.getElementById('new-cat-name-ta').value.trim();
+
+    if (!name) {
+        showToast('Enter a category name', 'warning');
+        return;
+    }
+
+    try {
+        const res      = await API.post('/api/admin/categories', {
+            name, name_ta: nameTa || null
+        });
+        const category = res.data?.category;
+
+        // Add to local list
+        categories.push(category);
+        populateCategorySelect();
+
+        // Auto-select new category
+        document.getElementById('p-category').value = category.id;
+
+        // Hide form
+        document.getElementById('new-category-form').style.display = 'none';
+        document.getElementById('new-cat-name').value    = '';
+        document.getElementById('new-cat-name-ta').value = '';
+
+        showToast(`Category "${category.name}" created! ✅`);
+
+    } catch (err) {
+        showToast(err.message || 'Failed to create category', 'error');
+    }
+}
+
+
+// ── Add Variant Row ────────────────────────────────────────
+function addVariantRow(v = null) {
+    const row = document.createElement('div');
+    row.className = 'variant-row';
+    row.style.cssText = `
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr 36px;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+        align-items: center;
+    `;
+    row.innerHTML = `
+        <input class="form-input" placeholder="Label (e.g. 500g)"
+               value="${v?.label || ''}"
+               style="font-size:var(--text-sm)">
+        <input class="form-input" type="number" placeholder="Price"
+               value="${v?.price || ''}"
+               style="font-size:var(--text-sm)">
+        <input class="form-input" type="number" placeholder="Sale"
+               value="${v?.sale_price || ''}"
+               style="font-size:var(--text-sm)">
+        <input class="form-input" type="number" placeholder="Stock"
+               value="${v?.stock_qty ?? 0}"
+               style="font-size:var(--text-sm)">
+        <button onclick="this.parentElement.remove()"
+                style="color:var(--color-error); font-size:1.1rem;
+                       background:none; border:none; cursor:pointer;
+                       padding:var(--space-1)">
+            <i class="ph ph-trash"></i>
+        </button>
+    `;
+    document.getElementById('variants-list').appendChild(row);
+}
+
+
+// ── Save Product ───────────────────────────────────────────
+async function saveProduct() {
+    const name       = document.getElementById('p-name').value.trim();
+    const categoryId = document.getElementById('p-category').value;
+
+    if (!name)       { showToast('Product name is required', 'warning'); return; }
+    if (!categoryId) { showToast('Please select a category', 'warning'); return; }
+
+    // Collect variants
+    const variants = [];
+    document.querySelectorAll('.variant-row').forEach(row => {
+        const inputs = row.querySelectorAll('input');
+        const label  = inputs[0].value.trim();
+        const price  = parseFloat(inputs[1].value);
+        if (label && !isNaN(price) && price > 0) {
+            variants.push({
+                label,
+                price,
+                sale_price : inputs[2].value ? parseFloat(inputs[2].value) : null,
+                stock_qty  : parseInt(inputs[3].value) || 0,
+            });
+        }
+    });
+
+    if (variants.length === 0) {
+        showToast('Add at least one variant with label and price', 'warning');
+        return;
+    }
+
+    const payload = {
+        name        : name,
+        name_ta     : document.getElementById('p-name-ta').value.trim()      || null,
+        category_id : parseInt(categoryId),
+        short_desc  : document.getElementById('p-short-desc').value.trim()   || null,
+        description : document.getElementById('p-description').value.trim()  || null,
+        source_info : document.getElementById('p-source').value.trim()       || null,
+        is_featured : document.getElementById('p-featured').checked,
+        is_active   : document.getElementById('p-active').checked,
+        variants,
+    };
+
+    const btn = document.getElementById('save-product-btn');
+    btn.disabled  = true;
+    btn.innerHTML = '<i class="ph ph-circle-notch"></i> Saving...';
+
+    try {
+        let product;
+
+        if (editingProductId) {
+            const res = await API.patch(
+                `/api/admin/products/${editingProductId}`, payload);
+            product = res.data?.product;
+            showToast('Product updated ✅');
+        } else {
+            const res = await API.post('/api/admin/products', payload);
+            product   = res.data?.product;
+            showToast('Product created ✅');
+        }
+
+        // Upload pending images
+        if (pendingImages.length > 0 && product?.id) {
+            btn.innerHTML = `<i class="ph ph-circle-notch"></i>
+                Uploading ${pendingImages.length} image(s)...`;
+            await uploadPendingImages(product.id);
+        }
+
+        closeProductModal();
+        loadProducts();
+
+    } catch (err) {
+        showToast(err.message || 'Save failed', 'error');
+    } finally {
+        btn.disabled  = false;
+        btn.innerHTML = '<i class="ph ph-floppy-disk"></i> Save Product';
+    }
+}
+
+
+// ── Upload Pending Images ──────────────────────────────────
+async function uploadPendingImages(productId) {
+    for (let i = 0; i < pendingImages.length; i++) {
+        const file     = pendingImages[i];
+        const formData = new FormData();
+        formData.append('image', file);
+
+        try {
+            await API.upload(
+                `/api/admin/products/${productId}/images`,
+                formData
+            );
+
+            // Update progress bar
+            const bar = document.getElementById(`progress-${i}`);
+            if (bar) bar.style.width = '100%';
+
+        } catch (err) {
+            showToast(`Failed to upload ${file.name}`, 'warning');
+        }
+    }
+}
+
+
+// ── Edit Product ───────────────────────────────────────────
+async function editProduct(productId) {
+    try {
+        const res = await API.get(`/api/admin/products/${productId}`);
+        openProductModal(res.data?.product);
+    } catch (e) {
+        showToast('Could not load product', 'error');
+    }
+}
+
+
+// ── Delete Product ─────────────────────────────────────────
+async function deleteProduct(productId, name) {
+    if (!confirm(`Deactivate "${name}"? It will be hidden from the store.`)) return;
+    try {
+        await API.delete(`/api/admin/products/${productId}`);
+        showToast('Product deactivated');
+        loadProducts();
+    } catch (err) {
+        showToast(err.message || 'Failed', 'error');
+    }
+}
+
+
+// ── Modal helpers ──────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open');    }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+</script>
+{% endblock %}

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ page_description | default('KYFF — Pure. Local. Yours. Farm-fresh organic foods delivered from Tamil Nadu farmers directly to your doorstep.') }}">
+
+    <title>{{ page_title | default('KYFF — Pure. Local. Yours.') }}</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/static/images/favicon.png">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+    <!-- Icons — Phosphor Icons (lightweight, beautiful) -->
+    <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/pages.css">
+
+    <!-- Page-specific CSS -->
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     NAVBAR
+     ══════════════════════════════════════════════════════════ -->
+<nav class="navbar">
+    <div class="container navbar-inner">
+
+        <!-- Mobile Menu Toggle -->
+        <button class="navbar-toggle show-mobile" onclick="toggleDrawer()" aria-label="Menu">
+            <i class="ph ph-list"></i>
+        </button>
+
+        <!-- Logo -->
+        <a href="/" class="navbar-logo">
+            <span class="navbar-logo-text">KY<span>FF</span></span>
+        </a>
+
+        <!-- Search — hidden on mobile -->
+        <div class="navbar-search hide-mobile">
+            <i class="ph ph-magnifying-glass navbar-search-icon"></i>
+            <input
+                type="search"
+                id="search-input"
+                placeholder="Search millets, oils, spices..."
+                autocomplete="off"
+                onkeydown="handleSearch(event)"
+            >
+        </div>
+
+        <!-- Actions -->
+        <div class="navbar-actions">
+
+            <!-- Search icon — mobile only -->
+            <button class="navbar-icon-btn show-mobile" onclick="toggleMobileSearch()" aria-label="Search">
+                <i class="ph ph-magnifying-glass"></i>
+            </button>
+
+            <!-- Wishlist / Account -->
+            <a href="/auth/login" class="navbar-icon-btn hide-mobile" id="account-btn" aria-label="Account">
+                <i class="ph ph-user"></i>
+            </a>
+
+            <!-- Cart -->
+            <a href="/cart" class="navbar-icon-btn" aria-label="Cart">
+                <i class="ph ph-shopping-cart"></i>
+                <span class="cart-badge" id="cart-count" style="display:none">0</span>
+            </a>
+
+        </div>
+    </div>
+
+    <!-- Category Nav — Desktop -->
+    <div class="navbar-menu hide-mobile">
+        <div class="container navbar-menu-inner" id="category-nav">
+            <!-- Populated by JS from API -->
+            <a href="/products" class="{{ 'active' if active_page == 'products' else '' }}">All Products</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Mobile Search Bar (slides in) -->
+<div id="mobile-search-bar" style="display:none; background:var(--color-bg-card); padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+    <div class="navbar-search" style="max-width:100%">
+        <i class="ph ph-magnifying-glass navbar-search-icon"></i>
+        <input
+            type="search"
+            id="mobile-search-input"
+            placeholder="Search products..."
+            autocomplete="off"
+            onkeydown="handleSearch(event)"
+        >
+    </div>
+</div>
+
+<!-- Mobile Drawer Overlay -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="toggleDrawer()"></div>
+
+<!-- Mobile Drawer -->
+<div class="mobile-drawer" id="mobile-drawer">
+    <div class="mobile-drawer-header">
+        <span class="navbar-logo-text">KY<span style="color:var(--color-accent-light)">FF</span></span>
+        <button class="mobile-drawer-close" onclick="toggleDrawer()">
+            <i class="ph ph-x"></i>
+        </button>
+    </div>
+
+    <!-- User Section -->
+    <div style="padding:var(--space-4) var(--space-6); border-bottom:1px solid var(--color-border);" id="drawer-user-section">
+        <a href="/auth/login" class="btn btn-outline btn-full">Login / Register</a>
+    </div>
+
+    <nav class="mobile-drawer-nav" id="drawer-nav">
+        <a href="/"><i class="ph ph-house"></i> Home</a>
+        <a href="/products"><i class="ph ph-storefront"></i> All Products</a>
+        <a href="/cart"><i class="ph ph-shopping-cart"></i> Cart</a>
+        <a href="/orders"><i class="ph ph-package"></i> My Orders</a>
+        <div style="border-top:1px solid var(--color-border); margin:var(--space-3) 0;"></div>
+        <!-- Categories added by JS -->
+        <div id="drawer-categories"></div>
+    </nav>
+
+    <!-- Admin link — shown only for admins -->
+    <div id="drawer-admin" style="display:none; padding:var(--space-4) var(--space-6); border-top:1px solid var(--color-border);">
+        <a href="/admin" style="color:var(--color-accent); font-size:var(--text-sm); font-weight:var(--weight-semibold);">
+            <i class="ph ph-gear"></i> Admin Panel
+        </a>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     MAIN CONTENT
+     ══════════════════════════════════════════════════════════ -->
+<main id="main-content">
+    {% block content %}{% endblock %}
+</main>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     FOOTER
+     ══════════════════════════════════════════════════════════ -->
+<footer class="footer">
+    <div class="container">
+        <div class="footer-grid">
+
+            <!-- Brand -->
+            <div class="footer-brand">
+                <div class="footer-logo-text">KY<span>FF</span></div>
+                <p>Pure. Local. Yours. Farm-fresh organic foods from Tamil Nadu farmers, delivered straight to your doorstep.</p>
+            </div>
+
+            <!-- Shop -->
+            <div class="footer-col">
+                <h4>Shop</h4>
+                <ul>
+                    <li><a href="/products">All Products</a></li>
+                    <li><a href="/products?featured=true">Featured</a></li>
+                    <li><a href="/products?sale=true">On Sale</a></li>
+                    <li><a href="/products?new=true">New Arrivals</a></li>
+                </ul>
+            </div>
+
+            <!-- Help -->
+            <div class="footer-col">
+                <h4>Help</h4>
+                <ul>
+                    <li><a href="/orders">Track Order</a></li>
+                    <li><a href="#">Returns</a></li>
+                    <li><a href="#">Shipping Info</a></li>
+                    <li><a href="#">FAQ</a></li>
+                </ul>
+            </div>
+
+            <!-- Contact -->
+            <div class="footer-col">
+                <h4>Contact</h4>
+                <ul>
+                    <li><a href="mailto:hello@kyff.in">hello@kyff.in</a></li>
+                    <li><a href="tel:+919999999999">+91 99999 99999</a></li>
+                    <li><a href="#">WhatsApp</a></li>
+                    <li><a href="#">Instagram</a></li>
+                </ul>
+            </div>
+
+        </div>
+
+        <!-- Bottom -->
+        <div class="footer-bottom">
+            <p>© 2024 KYFF. All rights reserved.</p>
+            <p>Made with ❤️ for Tamil Nadu farmers</p>
+            <p><a href="#" style="color:rgba(255,255,255,0.5)">Privacy Policy</a> · <a href="#" style="color:rgba(255,255,255,0.5)">Terms</a></p>
+        </div>
+    </div>
+</footer>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     BOT TRIGGER BUTTON
+     ══════════════════════════════════════════════════════════ -->
+<button class="bot-trigger" onclick="toggleBot()" aria-label="Chat with KYFF Assistant">
+    <i class="ph ph-chat-circle-dots" id="bot-icon"></i>
+</button>
+
+<!-- Bot Chat Window -->
+<div class="bot-window" id="bot-window">
+    <div class="bot-window-header">
+        <div class="bot-avatar">🌾</div>
+        <div>
+            <h4>KYFF Assistant</h4>
+            <p>Ask me anything about our products!</p>
+        </div>
+        <button onclick="toggleBot()" style="margin-left:auto; color:white; font-size:1.2rem; background:none; border:none; cursor:pointer;">
+            <i class="ph ph-x"></i>
+        </button>
+    </div>
+    <div class="bot-messages" id="bot-messages">
+        <div class="bot-message bot">
+            👋 Hi! I'm your KYFF assistant. Ask me about our organic products, recipes, or your orders!
+        </div>
+    </div>
+    <div class="bot-input-area">
+        <input
+            type="text"
+            class="bot-input"
+            id="bot-input"
+            placeholder="Type a message..."
+            onkeydown="handleBotInput(event)"
+        >
+        <button class="bot-send" onclick="sendBotMessage()">
+            <i class="ph ph-paper-plane-right"></i>
+        </button>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     TOAST CONTAINER
+     ══════════════════════════════════════════════════════════ -->
+<div class="toast-container" id="toast-container"></div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ══════════════════════════════════════════════════════════ -->
+<script src="/static/js/api.js"></script>
+<script src="/static/js/auth.js"></script>
+<script src="/static/js/cart.js"></script>
+<script src="/static/js/main.js"></script>
+
+<script>
+/* ── Base JS — runs on every page ── */
+
+// ── Mobile Drawer ──────────────────────────────────────────
+function toggleDrawer() {
+    const drawer  = document.getElementById('mobile-drawer');
+    const overlay = document.getElementById('drawer-overlay');
+    drawer.classList.toggle('open');
+    overlay.classList.toggle('open');
+    document.body.style.overflow = drawer.classList.contains('open') ? 'hidden' : '';
+}
+
+// ── Mobile Search ──────────────────────────────────────────
+function toggleMobileSearch() {
+    const bar = document.getElementById('mobile-search-bar');
+    bar.style.display = bar.style.display === 'none' ? 'block' : 'none';
+    if (bar.style.display === 'block') {
+        document.getElementById('mobile-search-input').focus();
+    }
+}
+
+// ── Search Handler ─────────────────────────────────────────
+function handleSearch(event) {
+    if (event.key === 'Enter') {
+        const q = event.target.value.trim();
+        if (q) window.location.href = `/products?q=${encodeURIComponent(q)}`;
+    }
+}
+
+// ── Bot Toggle ─────────────────────────────────────────────
+function toggleBot() {
+    const win  = document.getElementById('bot-window');
+    const icon = document.getElementById('bot-icon');
+    win.classList.toggle('open');
+    icon.className = win.classList.contains('open')
+        ? 'ph ph-x'
+        : 'ph ph-chat-circle-dots';
+}
+
+// ── Bot Message ────────────────────────────────────────────
+function handleBotInput(event) {
+    if (event.key === 'Enter') sendBotMessage();
+}
+
+async function sendBotMessage() {
+    const input = document.getElementById('bot-input');
+    const msg   = input.value.trim();
+    if (!msg) return;
+
+    // Show user message
+    appendBotMessage(msg, 'user');
+    input.value = '';
+
+    // Show typing indicator
+    const typingId = appendBotMessage('...', 'bot typing');
+
+    try {
+        const res  = await API.post('/api/bot/chat', { message: msg });
+        removeBotMessage(typingId);
+        appendBotMessage(res.data.reply, 'bot');
+    } catch {
+        removeBotMessage(typingId);
+        appendBotMessage('Sorry, I am having trouble responding. Please try again!', 'bot');
+    }
+}
+
+function appendBotMessage(text, type) {
+    const messages = document.getElementById('bot-messages');
+    const div = document.createElement('div');
+    div.className = `bot-message ${type}`;
+    div.textContent = text;
+    div.id = `msg-${Date.now()}`;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return div.id;
+}
+
+function removeBotMessage(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
+// ── Toast ──────────────────────────────────────────────────
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast     = document.createElement('div');
+    const icons     = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<span>${icons[type] || '✅'}</span><span>${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideOutRight 300ms ease forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+// ── Load Categories in Navbar ──────────────────────────────
+async function loadNavCategories() {
+    try {
+        const res = await API.get('/api/categories/');
+        const nav = document.getElementById('category-nav');
+        const drawerCats = document.getElementById('drawer-categories');
+
+        res.data.categories.forEach(cat => {
+            // Desktop nav
+            const a = document.createElement('a');
+            a.href = `/products?category=${cat.slug}`;
+            a.textContent = cat.name;
+            nav.appendChild(a);
+
+            // Mobile drawer
+            const da = document.createElement('a');
+            da.href = `/products?category=${cat.slug}`;
+            da.innerHTML = `<i class="ph ph-leaf"></i> ${cat.name}`;
+            drawerCats.appendChild(da);
+        });
+    } catch (e) {
+        // Silent fail — categories optional in nav
+    }
+}
+
+// ── Update Cart Count Badge ────────────────────────────────
+function updateCartBadge(count) {
+    const badge = document.getElementById('cart-count');
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+// ── Update Account Button ──────────────────────────────────
+function updateAccountBtn() {
+    const btn         = document.getElementById('account-btn');
+    const drawerUser  = document.getElementById('drawer-user-section');
+    const drawerAdmin = document.getElementById('drawer-admin');
+    const user        = Auth.getUser();
+
+    if (user) {
+        if (btn) {
+            btn.href = '/orders';
+            btn.title = user.name;
+        }
+        if (drawerUser) {
+            drawerUser.innerHTML = `
+                <div style="font-weight:600; color:var(--color-text); margin-bottom:var(--space-2);">
+                    👋 ${user.name}
+                </div>
+                <div style="font-size:var(--text-xs); color:var(--color-text-muted); margin-bottom:var(--space-3);">
+                    ${user.email}
+                </div>
+                <a href="/orders" class="btn btn-outline btn-sm btn-full" style="margin-bottom:var(--space-2);">My Orders</a>
+                <button onclick="Auth.logout()" class="btn btn-ghost btn-sm btn-full">Logout</button>
+            `;
+        }
+        if (user.role === 'admin' && drawerAdmin) {
+            drawerAdmin.style.display = 'block';
+        }
+    }
+}
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    loadNavCategories();
+    updateAccountBtn();
+    if (typeof Cart !== 'undefined') Cart.refreshBadge();
+});
+</script>
+
+<!-- Page-specific JS -->
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>

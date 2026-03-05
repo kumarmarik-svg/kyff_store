@@ -199,7 +199,7 @@ def list_products():
     return success(
         message = "Products fetched",
         data    = {
-            "products": [p.to_dict(include_images=True) for p in paginated.items],
+           "products": [p.to_dict(include_variants=True, include_images=True) for p in paginated.items],
             "pagination": {
                 "page":        paginated.page,
                 "per_page":    paginated.per_page,
@@ -251,7 +251,7 @@ def search_products():
         message = f"{paginated.total} results found for '{q}'",
         data    = {
             "query":    q,
-            "products": [p.to_dict(include_images=True) for p in paginated.items],
+            "products": [p.to_dict(include_variants=True, include_images=True) for p in paginated.items],
             "pagination": {
                 "page":        paginated.page,
                 "per_page":    paginated.per_page,

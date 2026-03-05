@@ -36,6 +36,7 @@ def create_app():
     from .routes.payments   import payments_bp
     from .routes.reviews    import reviews_bp
     from .routes.admin      import admin_bp
+    from .routes.views      import views_bp
 
     app.register_blueprint(auth_bp,       url_prefix="/api/auth")
     app.register_blueprint(products_bp,   url_prefix="/api/products")
@@ -45,5 +46,6 @@ def create_app():
     app.register_blueprint(payments_bp,   url_prefix="/api/payments")
     app.register_blueprint(reviews_bp,    url_prefix="/api/reviews")
     app.register_blueprint(admin_bp,      url_prefix="/api/admin")
+    app.register_blueprint(views_bp)  
 
     return app

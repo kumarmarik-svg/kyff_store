@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title | default('Admin') }} — KYFF Admin</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/pages.css">
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Top Bar ── -->
+<nav class="navbar">
+    <div class="container navbar-inner">
+        <a href="/admin" class="navbar-logo">
+            <span class="navbar-logo-text">KY<span>FF</span></span>
+            <span style="font-size:var(--text-xs); background:var(--color-accent);
+                         color:white; padding:2px 8px; border-radius:var(--radius-full);
+                         margin-left:var(--space-2); font-family:var(--font-body);
+                         font-weight:var(--weight-bold)">ADMIN</span>
+        </a>
+        <div class="navbar-actions">
+            <a href="/" class="btn btn-ghost btn-sm" target="_blank">
+                <i class="ph ph-storefront"></i> View Store
+            </a>
+            <button class="btn btn-ghost btn-sm" onclick="adminLogout()">
+                <i class="ph ph-sign-out"></i> Logout
+            </button>
+        </div>
+    </div>
+</nav>
+
+<!-- ── Admin Layout ── -->
+<div class="admin-layout">
+
+    <!-- ── Sidebar ── -->
+    <aside class="admin-sidebar hide-mobile">
+        <div class="admin-nav-section">Main</div>
+        <a href="/admin"          class="admin-nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+            <i class="ph ph-squares-four admin-nav-icon"></i> Dashboard
+        </a>
+        <a href="/admin/orders"   class="admin-nav-item {% if active_page == 'orders' %}active{% endif %}">
+            <i class="ph ph-package admin-nav-icon"></i> Orders
+            <span id="pending-orders-count" style="margin-left:auto; display:none"
+                  class="badge badge-accent"></span>
+        </a>
+
+        <div class="admin-nav-section">Catalog</div>
+        <a href="/admin/products"   class="admin-nav-item {% if active_page == 'products' %}active{% endif %}">
+            <i class="ph ph-plant admin-nav-icon"></i> Products
+        </a>
+        <a href="/admin/reviews"    class="admin-nav-item {% if active_page == 'reviews' %}active{% endif %}">
+            <i class="ph ph-star admin-nav-icon"></i> Reviews
+            <span id="pending-reviews-count" style="margin-left:auto; display:none"
+                  class="badge badge-accent"></span>
+        </a>
+
+        <div class="admin-nav-section">Store</div>
+        <a href="/admin/users"    class="admin-nav-item {% if active_page == 'users' %}active{% endif %}">
+            <i class="ph ph-users admin-nav-icon"></i> Customers
+        </a>
+        <a href="/admin/banners"  class="admin-nav-item {% if active_page == 'banners' %}active{% endif %}">
+            <i class="ph ph-image admin-nav-icon"></i> Banners
+        </a>
+
+        <div class="admin-nav-section">Account</div>
+        <a href="/" target="_blank" class="admin-nav-item">
+            <i class="ph ph-storefront admin-nav-icon"></i> View Store
+        </a>
+        <button onclick="adminLogout()" class="admin-nav-item" style="width:100%; text-align:left; background:none; border:none; cursor:pointer">
+            <i class="ph ph-sign-out admin-nav-icon"></i> Logout
+        </button>
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <main class="admin-main">
+        {% block content %}{% endblock %}
+    </main>
+
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- JS -->
+<script src="/static/js/api.js"></script>
+<script src="/static/js/auth.js"></script>
+<script src="/static/js/main.js"></script>
+
+<script>
+// Admin guard
+document.addEventListener('DOMContentLoaded', () => {
+    const user = Auth.getUser();
+    if (!user || user.role !== 'admin') {
+        window.location.href = '/auth/login?next=/admin';
+        return;
+    }
+    loadAdminBadges();
+});
+
+async function loadAdminBadges() {
+    try {
+        const res = await API.get('/api/admin/dashboard');
+        const d   = res.data;
+
+        const pendingOrders = d?.orders?.by_status?.pending || 0;
+        if (pendingOrders > 0) {
+            const el = document.getElementById('pending-orders-count');
+            el.textContent    = pendingOrders;
+            el.style.display  = 'inline-flex';
+        }
+
+        const pendingReviews = d?.pending_reviews || 0;
+        if (pendingReviews > 0) {
+            const el = document.getElementById('pending-reviews-count');
+            el.textContent    = pendingReviews;
+            el.style.display  = 'inline-flex';
+        }
+    } catch (e) {}
+}
+
+function adminLogout() {
+    Auth.logout();
+    window.location.href = '/auth/login';
+}
+
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast     = document.createElement('div');
+    const icons     = { success:'✅', error:'❌', warning:'⚠️', info:'ℹ️' };
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<span>${icons[type]||'✅'}</span><span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'slideOutRight 300ms ease forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+function formatDate(str) {
+    if (!str) return '';
+    return new Date(str).toLocaleDateString('en-IN', {
+        day:'numeric', month:'short', year:'numeric'
+    });
+}
+
+function capitalize(str) {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+}
+</script>
+
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>

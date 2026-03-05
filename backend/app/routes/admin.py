@@ -1,3 +1,5 @@
+import os
+import uuid
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
@@ -8,6 +10,8 @@ from ..models import (
     Category, Order, OrderItem, Payment,
     Review, Banner, ShippingRule
 )
+from werkzeug.utils import secure_filename
+from flask import request, jsonify, current_app
 
 # ── Blueprint ─────────────────────────────────────────────────
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
@@ -869,3 +873,151 @@ def update_shipping_rule(rule_id):
         message = "Shipping rule updated",
         data    = {"rule": rule.to_dict()}
     )
+
+# ── Allowed image extensions ───────────────────────────────
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# ── Upload Product Image ───────────────────────────────────
+@admin_bp.route('/products/<int:product_id>/images', methods=['POST'])
+@jwt_required()
+@admin_required
+def upload_product_image(product_id):
+    product = Product.query.get_or_404(product_id)
+
+    if 'image' not in request.files:
+        return jsonify({'message': 'No image file provided'}), 400
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'message': 'No file selected'}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({'message': 'Invalid file type. Use JPG, PNG or WEBP'}), 400
+
+    # Generate unique filename
+    ext      = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"{product.slug}-{uuid.uuid4().hex[:8]}.{ext}"
+
+    # Save path
+    upload_folder = os.path.join(
+        current_app.root_path, '..', 'frontend', 'static', 'images', 'products'
+    )
+    os.makedirs(upload_folder, exist_ok=True)
+    filepath = os.path.join(upload_folder, filename)
+    file.save(filepath)
+
+    # Get sort order
+    existing_count = ProductImage.query.filter_by(product_id=product_id).count()
+
+    # Save to DB
+    image = ProductImage(
+        product_id = product_id,
+        image_url  = f"/static/images/products/{filename}",
+        alt_text   = product.name,
+        sort_order = existing_count,
+    )
+    db.session.add(image)
+    db.session.commit()
+
+    return jsonify({
+        'message' : 'Image uploaded successfully',
+        'image'   : {
+            'id'        : image.id,
+            'image_url' : image.image_url,
+            'alt_text'  : image.alt_text,
+            'sort_order': image.sort_order,
+        }
+    }), 201
+
+
+# ── Delete Product Image ───────────────────────────────────
+@admin_bp.route('/products/images/<int:image_id>', methods=['DELETE'])
+@jwt_required()
+@admin_required
+def delete_product_image(image_id):
+    image = ProductImage.query.get_or_404(image_id)
+
+    # Delete file from disk
+    try:
+        filepath = os.path.join(
+            current_app.root_path, '..', 'frontend',
+            image.image_url.lstrip('/')
+        )
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    except Exception:
+        pass  # non-critical
+
+    db.session.delete(image)
+    db.session.commit()
+
+    return jsonify({'message': 'Image deleted'}), 200
+
+
+# ── Get Product Images ─────────────────────────────────────
+@admin_bp.route('/products/<int:product_id>/images', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_product_images(product_id):
+    images = ProductImage.query.filter_by(
+        product_id=product_id
+    ).order_by(ProductImage.sort_order).all()
+
+    return jsonify({
+        'images': [{
+            'id'        : img.id,
+            'image_url' : img.image_url,
+            'alt_text'  : img.alt_text,
+            'sort_order': img.sort_order,
+        } for img in images]
+    }), 200
+
+
+# ── Create Category on the fly ─────────────────────────────
+@admin_bp.route('/categories', methods=['POST'])
+@jwt_required()
+@admin_required
+def create_category():
+    data = request.get_json()
+    name = data.get('name', '').strip()
+
+    if not name:
+        return jsonify({'message': 'Category name is required'}), 400
+
+    # Auto-generate slug
+    slug = name.lower().replace(' ', '-').replace('/', '-')
+
+    # Check duplicate
+    existing = Category.query.filter_by(slug=slug).first()
+    if existing:
+        return jsonify({
+            'message'  : 'Category already exists',
+            'category' : {
+                'id'   : existing.id,
+                'name' : existing.name,
+                'slug' : existing.slug,
+            }
+        }), 200
+
+    category = Category(
+        name      = name,
+        name_ta   = data.get('name_ta', '').strip() or None,
+        slug      = slug,
+        is_active = True,
+    )
+    db.session.add(category)
+    db.session.commit()
+
+    return jsonify({
+        'message'  : 'Category created',
+        'category' : {
+            'id'   : category.id,
+            'name' : category.name,
+            'slug' : category.slug,
+        }
+    }), 201

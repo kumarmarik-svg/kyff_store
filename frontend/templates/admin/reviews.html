@@ -1,0 +1,137 @@
+{% extends "admin/base.html" %}
+{% set active_page = "reviews" %}
+
+{% block content %}
+
+<div class="admin-page-header">
+    <h1>Reviews</h1>
+</div>
+
+<!-- Filter -->
+<div style="display:flex; gap:var(--space-2); margin-bottom:var(--space-6)">
+    <button class="tab-btn active" onclick="filterReviews('pending')"   id="rtab-pending">Pending</button>
+    <button class="tab-btn"        onclick="filterReviews('approved')"  id="rtab-approved">Approved</button>
+    <button class="tab-btn"        onclick="filterReviews('all')"       id="rtab-all">All</button>
+</div>
+
+<div class="admin-table-wrapper">
+    <div style="overflow-x:auto">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Customer</th>
+                    <th>Rating</th>
+                    <th>Review</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="reviews-tbody">
+                <tr><td colspan="7" style="text-align:center; padding:var(--space-8)">
+                    <div class="spinner" style="margin:0 auto"></div>
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+let reviewFilter = 'pending';
+
+document.addEventListener('DOMContentLoaded', () => loadReviews());
+
+function filterReviews(f) {
+    reviewFilter = f;
+    document.querySelectorAll('[id^="rtab-"]').forEach(t => t.classList.remove('active'));
+    document.getElementById(`rtab-${f}`).classList.add('active');
+    loadReviews();
+}
+
+async function loadReviews() {
+    const params = new URLSearchParams();
+    if (reviewFilter !== 'all') params.set('status', reviewFilter);
+
+    try {
+        const res     = await API.get(`/api/admin/reviews?${params}`);
+        const reviews = res.data?.reviews || [];
+        const tbody   = document.getElementById('reviews-tbody');
+
+        if (reviews.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;
+                color:var(--color-text-muted); padding:var(--space-8)">
+                No ${reviewFilter} reviews</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = reviews.map(r => `
+            <tr>
+                <td style="font-size:var(--text-sm)">${r.product?.name || '—'}</td>
+                <td style="font-size:var(--text-sm)">${r.user?.name || '—'}</td>
+                <td>
+                    <span style="color:#F4A261">
+                        ${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}
+                    </span>
+                </td>
+                <td style="max-width:240px">
+                    ${r.title ? `<strong style="font-size:var(--text-xs)">${r.title}</strong><br>` : ''}
+                    <span style="font-size:var(--text-xs); color:var(--color-text-muted)">
+                        ${r.body ? r.body.substring(0,100) + (r.body.length > 100 ? '...' : '') : '—'}
+                    </span>
+                </td>
+                <td style="font-size:var(--text-xs)">${formatDate(r.created_at)}</td>
+                <td>
+                    <span class="badge ${r.is_approved ? 'badge-success' : 'badge-warning'}">
+                        ${r.is_approved ? 'Approved' : 'Pending'}
+                    </span>
+                </td>
+                <td>
+                    <div class="admin-table-actions">
+                        ${!r.is_approved ? `
+                            <button class="btn btn-primary btn-sm"
+                                    onclick="approveReview(${r.id})">
+                                Approve
+                            </button>
+                        ` : ''}
+                        <button class="btn btn-ghost btn-sm"
+                                style="color:var(--color-error)"
+                                onclick="deleteReview(${r.id})">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (e) {
+        showToast('Failed to load reviews', 'error');
+    }
+}
+
+async function approveReview(id) {
+    try {
+        await API.patch(`/api/admin/reviews/${id}/approve`, {});
+        showToast('Review approved ✅');
+        loadReviews();
+    } catch (err) {
+        showToast(err.message || 'Failed', 'error');
+    }
+}
+
+async function deleteReview(id) {
+    if (!confirm('Delete this review?')) return;
+    try {
+        await API.delete(`/api/admin/reviews/${id}`);
+        showToast('Review deleted');
+        loadReviews();
+    } catch (err) {
+        showToast(err.message || 'Failed', 'error');
+    }
+}
+</script>
+{% endblock %}

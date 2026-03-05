@@ -1,0 +1,647 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <div class="container">
+        <h1>Checkout</h1>
+        <div class="breadcrumb">
+            <a href="/">Home</a>
+            <span>›</span>
+            <a href="/cart">Cart</a>
+            <span>›</span>
+            <span>Checkout</span>
+        </div>
+    </div>
+</div>
+
+<div class="container" style="padding-bottom:var(--space-16)">
+
+    <!-- Loading -->
+    <div id="checkout-loading" class="loading-overlay">
+        <div class="spinner spinner-lg"></div>
+    </div>
+
+    <!-- Checkout Content -->
+    <div id="checkout-content" style="display:none">
+        <div class="checkout-layout">
+
+            <!-- ══════════════════════════════════════════════
+                 LEFT — Steps
+                 ══════════════════════════════════════════════ -->
+            <div>
+
+                <!-- ── Step 1: Delivery Address ── -->
+                <div class="checkout-step">
+                    <div class="checkout-step-header">
+                        <div class="step-number">1</div>
+                        <h3>Delivery Address</h3>
+                    </div>
+
+                    <!-- Saved Addresses -->
+                    <div id="saved-addresses" style="display:none">
+                        <div class="address-cards" id="address-cards-list">
+                            <!-- Populated by JS -->
+                        </div>
+                        <button
+                            class="btn btn-ghost btn-sm"
+                            style="margin-top:var(--space-4)"
+                            onclick="toggleNewAddressForm()"
+                            id="new-addr-toggle-btn"
+                        >
+                            <i class="ph ph-plus"></i> Add New Address
+                        </button>
+                    </div>
+
+                    <!-- New Address Form -->
+                    <div id="new-address-form">
+                        <div style="display:grid; gap:var(--space-4)">
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4)">
+                                <div class="form-group" style="margin-bottom:0">
+                                    <label class="form-label">
+                                        Full Name <span class="required">*</span>
+                                    </label>
+                                    <input type="text" class="form-input" id="addr-name"
+                                           placeholder="Enter full name">
+                                </div>
+                                <div class="form-group" style="margin-bottom:0">
+                                    <label class="form-label">
+                                        Phone <span class="required">*</span>
+                                    </label>
+                                    <input type="tel" class="form-input" id="addr-phone"
+                                           placeholder="+91 99999 99999">
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:0">
+                                <label class="form-label">
+                                    Address Line 1 <span class="required">*</span>
+                                </label>
+                                <input type="text" class="form-input" id="addr-line1"
+                                       placeholder="House / Flat No., Street Name">
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:0">
+                                <label class="form-label">Address Line 2</label>
+                                <input type="text" class="form-input" id="addr-line2"
+                                       placeholder="Area, Landmark (optional)">
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:var(--space-4)">
+                                <div class="form-group" style="margin-bottom:0">
+                                    <label class="form-label">
+                                        City <span class="required">*</span>
+                                    </label>
+                                    <input type="text" class="form-input" id="addr-city"
+                                           placeholder="City">
+                                </div>
+                                <div class="form-group" style="margin-bottom:0">
+                                    <label class="form-label">
+                                        State <span class="required">*</span>
+                                    </label>
+                                    <input type="text" class="form-input" id="addr-state"
+                                           value="Tamil Nadu">
+                                </div>
+                                <div class="form-group" style="margin-bottom:0">
+                                    <label class="form-label">
+                                        Pincode <span class="required">*</span>
+                                    </label>
+                                    <input type="text" class="form-input" id="addr-pincode"
+                                           placeholder="600001" maxlength="6">
+                                </div>
+                            </div>
+
+                            <label class="filter-option" style="font-size:var(--text-sm)">
+                                <input type="checkbox" id="addr-save"> Save this address
+                            </label>
+
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- ── Step 2: Order Notes ── -->
+                <div class="checkout-step">
+                    <div class="checkout-step-header">
+                        <div class="step-number">2</div>
+                        <h3>Delivery Notes <span style="font-size:var(--text-sm);
+                            font-weight:var(--weight-regular);
+                            color:var(--color-text-muted)">(optional)</span>
+                        </h3>
+                    </div>
+                    <textarea
+                        class="form-textarea"
+                        id="order-notes"
+                        placeholder="Any special delivery instructions? e.g. Leave at door, call before delivery..."
+                        rows="3"
+                    ></textarea>
+                </div>
+
+
+                <!-- ── Step 3: Payment ── -->
+                <div class="checkout-step">
+                    <div class="checkout-step-header">
+                        <div class="step-number">3</div>
+                        <h3>Payment Method</h3>
+                    </div>
+
+                    <div class="payment-options">
+
+                        <!-- Razorpay Online -->
+                        <label class="payment-option selected" id="pay-online-option">
+                            <input type="radio" name="payment" value="online"
+                                   checked onchange="selectPayment('online')"
+                                   style="display:none">
+                            <div class="payment-option-icon">💳</div>
+                            <div>
+                                <div class="payment-option-label">Pay Online</div>
+                                <div class="payment-option-desc">
+                                    UPI, Cards, Net Banking via Razorpay
+                                </div>
+                            </div>
+                            <div style="margin-left:auto">
+                                <span class="badge badge-success">Recommended</span>
+                            </div>
+                        </label>
+
+                        <!-- Cash on Delivery -->
+                        <label class="payment-option" id="pay-cod-option">
+                            <input type="radio" name="payment" value="cod"
+                                   onchange="selectPayment('cod')"
+                                   style="display:none">
+                            <div class="payment-option-icon">💵</div>
+                            <div>
+                                <div class="payment-option-label">Cash on Delivery</div>
+                                <div class="payment-option-desc">
+                                    Pay when your order arrives
+                                </div>
+                            </div>
+                        </label>
+
+                    </div>
+                </div>
+
+            </div>
+
+
+            <!-- ══════════════════════════════════════════════
+                 RIGHT — Order Summary
+                 ══════════════════════════════════════════════ -->
+            <div>
+                <div class="order-summary">
+                    <h3>Order Summary</h3>
+
+                    <!-- Items Preview -->
+                    <div id="checkout-items-preview"
+                         style="margin-bottom:var(--space-5); max-height:240px;
+                                overflow-y:auto; display:flex; flex-direction:column;
+                                gap:var(--space-3)">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <hr class="divider" style="margin:var(--space-4) 0">
+
+                    <!-- Totals -->
+                    <div class="summary-row">
+                        <span>Subtotal</span>
+                        <span>₹<span id="co-subtotal">0.00</span></span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Shipping</span>
+                        <span id="co-shipping">₹60.00</span>
+                    </div>
+                    <div class="summary-row total">
+                        <span>Total</span>
+                        <span>₹<span id="co-total">0.00</span></span>
+                    </div>
+
+                    <!-- Place Order Button -->
+                    <button
+                        class="btn btn-accent btn-full btn-xl"
+                        style="margin-top:var(--space-6)"
+                        onclick="placeOrder()"
+                        id="place-order-btn"
+                    >
+                        <i class="ph ph-check-circle"></i>
+                        Place Order
+                    </button>
+
+                    <p style="text-align:center; font-size:var(--text-xs);
+                               color:var(--color-text-muted); margin-top:var(--space-3)">
+                        <i class="ph ph-lock-simple"></i>
+                        Your payment info is always secure
+                    </p>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     ORDER SUCCESS MODAL
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="success-modal">
+    <div class="modal">
+        <div class="modal-body" style="text-align:center; padding:var(--space-10)">
+            <div style="font-size:4rem; margin-bottom:var(--space-4)">🎉</div>
+            <h2 style="font-family:var(--font-body); font-size:var(--text-2xl);
+                       font-weight:var(--weight-bold); color:var(--color-success);
+                       margin-bottom:var(--space-3)">
+                Order Placed!
+            </h2>
+            <p style="color:var(--color-text-secondary); margin-bottom:var(--space-2)">
+                Your order <strong id="success-order-number"></strong> has been placed successfully.
+            </p>
+            <p style="font-size:var(--text-sm); color:var(--color-text-muted);
+                       margin-bottom:var(--space-8)">
+                We'll send you updates on your delivery.
+            </p>
+            <div style="display:flex; flex-direction:column; gap:var(--space-3)">
+                <a href="/orders" class="btn btn-primary btn-full">
+                    <i class="ph ph-package"></i> Track My Order
+                </a>
+                <a href="/products" class="btn btn-outline btn-full">
+                    Continue Shopping
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ══════════════════════════════════════════════════════════
+   CHECKOUT PAGE JS
+   ══════════════════════════════════════════════════════════ */
+
+const FREE_SHIPPING = 500;
+const SHIP_CHARGE   = 60;
+
+let cartItems       = [];
+let selectedAddress = null;
+let paymentMethod   = 'online';
+let savedAddresses  = [];
+
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!Auth.isLoggedIn()) {
+        window.location.href = '/auth/login?next=/checkout';
+        return;
+    }
+    await Promise.all([loadCartData(), loadSavedAddresses()]);
+    document.getElementById('checkout-loading').style.display = 'none';
+    document.getElementById('checkout-content').style.display = 'block';
+});
+
+
+// ── Load Cart ──────────────────────────────────────────────
+async function loadCartData() {
+    try {
+        const res = await Cart.getCart();
+        cartItems = res.data?.items || [];
+
+        if (cartItems.length === 0) {
+            window.location.href = '/cart';
+            return;
+        }
+
+        renderCheckoutItems();
+        updateCheckoutTotals();
+    } catch (e) {
+        window.location.href = '/cart';
+    }
+}
+
+
+// ── Render Checkout Items Preview ──────────────────────────
+function renderCheckoutItems() {
+    const container = document.getElementById('checkout-items-preview');
+    container.innerHTML = cartItems.map(item => {
+        const v     = item.variant;
+        const p     = v?.product;
+        const price = parseFloat(v?.sale_price || v?.price || 0);
+        const image = p?.images?.[0]?.image_url || '/static/images/placeholder.png';
+
+        return `
+            <div style="display:flex; align-items:center; gap:var(--space-3)">
+                <img src="${image}" alt="${p?.name || ''}"
+                     style="width:48px; height:48px; border-radius:var(--radius-sm);
+                            object-fit:cover; flex-shrink:0"
+                     onerror="this.src='/static/images/placeholder.png'">
+                <div style="flex:1; min-width:0">
+                    <div style="font-size:var(--text-sm); font-weight:var(--weight-medium);
+                                white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                        ${p?.name || 'Product'}
+                    </div>
+                    <div style="font-size:var(--text-xs); color:var(--color-text-muted)">
+                        ${v?.label || ''} × ${item.quantity}
+                    </div>
+                </div>
+                <div style="font-weight:var(--weight-semibold); font-size:var(--text-sm);
+                            flex-shrink:0">
+                    ₹${(price * item.quantity).toFixed(2)}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+// ── Update Totals ──────────────────────────────────────────
+function updateCheckoutTotals() {
+    const subtotal = cartItems.reduce((sum, item) => {
+        const price = parseFloat(item.variant?.sale_price || item.variant?.price || 0);
+        return sum + price * item.quantity;
+    }, 0);
+
+    const shipping = subtotal >= FREE_SHIPPING ? 0 : SHIP_CHARGE;
+    const total    = subtotal + shipping;
+
+    document.getElementById('co-subtotal').textContent = subtotal.toFixed(2);
+    document.getElementById('co-total').textContent    = total.toFixed(2);
+
+    const shipEl = document.getElementById('co-shipping');
+    shipEl.innerHTML = shipping === 0
+        ? '<span style="color:var(--color-success)">FREE 🎉</span>'
+        : `₹${shipping.toFixed(2)}`;
+}
+
+
+// ── Load Saved Addresses ───────────────────────────────────
+async function loadSavedAddresses() {
+    try {
+        const res = await API.get('/api/auth/me');
+        const user = res.data?.user;
+
+        if (user?.addresses?.length > 0) {
+            savedAddresses = user.addresses;
+            renderSavedAddresses(user.addresses);
+            document.getElementById('saved-addresses').style.display  = 'block';
+            document.getElementById('new-address-form').style.display = 'none';
+
+            // Auto-select default
+            const def = user.addresses.find(a => a.is_default) || user.addresses[0];
+            if (def) selectAddress(def);
+        }
+
+        // Pre-fill name/phone from user profile
+        if (user?.name)  document.getElementById('addr-name').value  = user.name;
+        if (user?.phone) document.getElementById('addr-phone').value = user.phone;
+
+    } catch (e) {}
+}
+
+
+// ── Render Saved Address Cards ─────────────────────────────
+function renderSavedAddresses(addresses) {
+    const container = document.getElementById('address-cards-list');
+    container.innerHTML = addresses.map(addr => `
+        <div class="address-card ${addr.is_default ? 'selected' : ''}"
+             id="addr-card-${addr.id}"
+             onclick="selectAddress(${JSON.stringify(addr).replace(/"/g, '&quot;')})">
+            <div class="address-card-check">
+                ${addr.is_default ? '✓' : ''}
+            </div>
+            <strong style="font-size:var(--text-sm)">${addr.full_name}</strong>
+            <p>${addr.line1}${addr.line2 ? ', ' + addr.line2 : ''},
+               ${addr.city}, ${addr.state} — ${addr.pincode}</p>
+            <p style="margin-top:var(--space-1)">${addr.phone}</p>
+            ${addr.is_default
+                ? '<span class="badge badge-primary" style="margin-top:var(--space-2)">Default</span>'
+                : ''}
+        </div>
+    `).join('');
+}
+
+
+// ── Select Address ─────────────────────────────────────────
+function selectAddress(addr) {
+    selectedAddress = addr;
+
+    // Update card UI
+    document.querySelectorAll('.address-card').forEach(c => {
+        c.classList.remove('selected');
+        c.querySelector('.address-card-check').textContent = '';
+    });
+    const card = document.getElementById(`addr-card-${addr.id}`);
+    if (card) {
+        card.classList.add('selected');
+        card.querySelector('.address-card-check').textContent = '✓';
+    }
+}
+
+
+// ── Toggle New Address Form ────────────────────────────────
+function toggleNewAddressForm() {
+    const form = document.getElementById('new-address-form');
+    const btn  = document.getElementById('new-addr-toggle-btn');
+    const isHidden = form.style.display === 'none';
+
+    form.style.display = isHidden ? 'block' : 'none';
+    btn.innerHTML = isHidden
+        ? '<i class="ph ph-x"></i> Cancel'
+        : '<i class="ph ph-plus"></i> Add New Address';
+
+    if (isHidden) selectedAddress = null; // force new form
+}
+
+
+// ── Select Payment ─────────────────────────────────────────
+function selectPayment(method) {
+    paymentMethod = method;
+    document.getElementById('pay-online-option').classList.toggle('selected', method === 'online');
+    document.getElementById('pay-cod-option').classList.toggle('selected', method === 'cod');
+
+    const btn = document.getElementById('place-order-btn');
+    btn.innerHTML = method === 'cod'
+        ? '<i class="ph ph-check-circle"></i> Place Order (COD)'
+        : '<i class="ph ph-check-circle"></i> Place Order & Pay';
+}
+
+
+// ── Get Address Data ───────────────────────────────────────
+function getAddressData() {
+    // If saved address selected
+    if (selectedAddress && document.getElementById('new-address-form').style.display === 'none') {
+        return {
+            full_name : selectedAddress.full_name,
+            phone     : selectedAddress.phone,
+            line1     : selectedAddress.line1,
+            line2     : selectedAddress.line2 || '',
+            city      : selectedAddress.city,
+            state     : selectedAddress.state,
+            pincode   : selectedAddress.pincode,
+            country   : selectedAddress.country || 'India',
+        };
+    }
+
+    // New address from form
+    const name    = document.getElementById('addr-name').value.trim();
+    const phone   = document.getElementById('addr-phone').value.trim();
+    const line1   = document.getElementById('addr-line1').value.trim();
+    const city    = document.getElementById('addr-city').value.trim();
+    const state   = document.getElementById('addr-state').value.trim();
+    const pincode = document.getElementById('addr-pincode').value.trim();
+
+    if (!name || !phone || !line1 || !city || !state || !pincode) {
+        throw new Error('Please fill in all required address fields');
+    }
+
+    if (!/^\d{6}$/.test(pincode)) {
+        throw new Error('Please enter a valid 6-digit pincode');
+    }
+
+    return {
+        full_name : name,
+        phone,
+        line1,
+        line2     : document.getElementById('addr-line2').value.trim(),
+        city,
+        state,
+        pincode,
+        country   : 'India',
+    };
+}
+
+
+// ── Place Order ────────────────────────────────────────────
+async function placeOrder() {
+    const btn = document.getElementById('place-order-btn');
+
+    try {
+        // Validate address
+        const address = getAddressData();
+
+        btn.disabled  = true;
+        btn.classList.add('loading');
+
+        // Save address if requested
+        if (document.getElementById('addr-save')?.checked) {
+            try {
+                await API.post('/api/auth/me/addresses', address);
+            } catch (e) {} // non-blocking
+        }
+
+        // Place order
+        const orderRes = await API.post('/api/orders/place', {
+            address,
+            notes : document.getElementById('order-notes').value.trim() || null,
+        });
+
+        const order = orderRes.data?.order;
+        if (!order) throw new Error('Order creation failed');
+
+        // Handle payment
+        if (paymentMethod === 'cod') {
+            await handleCOD(order);
+        } else {
+            await handleRazorpay(order);
+        }
+
+    } catch (err) {
+        btn.disabled  = false;
+        btn.classList.remove('loading');
+        showToast(err.message || 'Failed to place order. Please try again.', 'error');
+    }
+}
+
+
+// ── COD Flow ───────────────────────────────────────────────
+async function handleCOD(order) {
+    await API.post('/api/payments/cod', {
+        order_number : order.order_number,
+    });
+    showOrderSuccess(order.order_number);
+}
+
+
+// ── Razorpay Flow ──────────────────────────────────────────
+async function handleRazorpay(order) {
+    // Get Razorpay order
+    const payRes = await API.post('/api/payments/initiate', {
+        order_number : order.order_number,
+    });
+
+    const { razorpay_order_id, amount, currency, key_id } = payRes.data;
+
+    const user = Auth.getUser();
+
+    const options = {
+        key         : key_id,
+        amount,
+        currency,
+        name        : 'KYFF',
+        description : `Order ${order.order_number}`,
+        order_id    : razorpay_order_id,
+        prefill     : {
+            name    : user?.name  || '',
+            email   : user?.email || '',
+            contact : user?.phone || '',
+        },
+        theme       : { color: '#2D6A4F' },
+
+        handler: async (response) => {
+            try {
+                await API.post('/api/payments/verify', {
+                    razorpay_order_id   : response.razorpay_order_id,
+                    razorpay_payment_id : response.razorpay_payment_id,
+                    razorpay_signature  : response.razorpay_signature,
+                    order_number        : order.order_number,
+                });
+                showOrderSuccess(order.order_number);
+            } catch (e) {
+                showToast('Payment verification failed. Contact support.', 'error');
+            }
+        },
+
+        modal: {
+            ondismiss: () => {
+                const btn = document.getElementById('place-order-btn');
+                btn.disabled  = false;
+                btn.classList.remove('loading');
+                showToast('Payment cancelled. Your order is saved.', 'warning');
+            }
+        }
+    };
+
+    const rzp = new Razorpay(options);
+    rzp.open();
+}
+
+
+// ── Show Success ───────────────────────────────────────────
+function showOrderSuccess(orderNumber) {
+    document.getElementById('success-order-number').textContent = `#${orderNumber}`;
+    document.getElementById('success-modal').classList.add('open');
+    Cart.clearLocalCart(); // clear local cart count
+}
+
+
+// ── Helpers ────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open');    }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+</script>
+
+<!-- Razorpay SDK — loaded only on checkout page -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+{% endblock %}
+```
+
+---
+
+## Key Explanations
+
+### Three-Step Checkout Flow
+```
+Step 1 → Delivery Address (saved or new)
+Step 2 → Delivery Notes (optional)
+Step 3 → Payment Method (Razorpay or COD)

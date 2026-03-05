@@ -1,0 +1,107 @@
+{% extends "admin/base.html" %}
+{% set active_page = "users" %}
+
+{% block content %}
+
+<div class="admin-page-header">
+    <h1>Customers</h1>
+</div>
+
+<div style="margin-bottom:var(--space-6)">
+    <input type="search" class="form-input" id="user-search"
+           placeholder="Search by name or email..."
+           style="max-width:360px"
+           oninput="debounce(loadUsers,400)()">
+</div>
+
+<div class="admin-table-wrapper">
+    <div style="overflow-x:auto">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Joined</th>
+                    <th>Orders</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="users-tbody">
+                <tr><td colspan="7" style="text-align:center; padding:var(--space-8)">
+                    <div class="spinner" style="margin:0 auto"></div>
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', loadUsers);
+
+function debounce(fn, delay) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+
+async function loadUsers() {
+    const search = document.getElementById('user-search').value.trim();
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+
+    try {
+        const res   = await API.get(`/api/admin/users?${params}`);
+        const users = res.data?.users || [];
+        const tbody = document.getElementById('users-tbody');
+
+        if (users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;
+                color:var(--color-text-muted); padding:var(--space-8)">
+                No customers found</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = users.map(u => `
+            <tr>
+                <td><strong>${u.name}</strong></td>
+                <td style="font-size:var(--text-sm)">${u.email}</td>
+                <td style="font-size:var(--text-sm)">${u.phone || '—'}</td>
+                <td style="font-size:var(--text-sm)">${formatDate(u.created_at)}</td>
+                <td>${u.order_count || 0}</td>
+                <td>
+                    <span class="badge ${u.is_active ? 'badge-success' : 'badge-error'}">
+                        ${u.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td>
+                    <button class="btn btn-outline btn-sm"
+                            onclick="toggleUser(${u.id}, ${u.is_active})">
+                        ${u.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (e) {
+        showToast('Failed to load customers', 'error');
+    }
+}
+
+async function toggleUser(userId, isActive) {
+    const action = isActive ? 'deactivate' : 'activate';
+    if (!confirm(`${capitalize(action)} this user?`)) return;
+    try {
+        await API.patch(`/api/admin/users/${userId}/toggle`, {});
+        showToast(`User ${action}d ✅`);
+        loadUsers();
+    } catch (err) {
+        showToast(err.message || 'Failed', 'error');
+    }
+}
+</script>
+{% endblock %}

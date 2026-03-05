@@ -1,0 +1,724 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container" style="padding: var(--space-8) var(--space-4)">
+
+    <!-- Loading State -->
+    <div id="product-loading">
+        <div style="display:grid; gap:var(--space-10);" class="product-detail-layout">
+            <div class="skeleton" style="aspect-ratio:1/1; border-radius:var(--radius-xl)"></div>
+            <div style="display:flex; flex-direction:column; gap:var(--space-4)">
+                <div class="skeleton skeleton-text" style="width:30%"></div>
+                <div class="skeleton skeleton-text" style="width:80%; height:2rem"></div>
+                <div class="skeleton skeleton-text" style="width:60%"></div>
+                <div class="skeleton skeleton-text" style="width:40%; height:2rem"></div>
+                <div class="skeleton" style="height:120px; border-radius:var(--radius-md)"></div>
+                <div class="skeleton" style="height:48px; border-radius:var(--radius-md)"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Content — hidden until loaded -->
+    <div id="product-content" style="display:none">
+
+        <!-- Breadcrumb -->
+        <div class="breadcrumb" style="margin-bottom:var(--space-6)">
+            <a href="/">Home</a>
+            <span>›</span>
+            <a href="/products">Products</a>
+            <span>›</span>
+            <a href="#" id="breadcrumb-category"></a>
+            <span>›</span>
+            <span id="breadcrumb-product"></span>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════
+             PRODUCT DETAIL LAYOUT
+             ══════════════════════════════════════════════════ -->
+        <div class="product-detail-layout">
+
+            <!-- LEFT — Image Gallery -->
+            <div class="product-gallery">
+                <div class="product-gallery-main">
+                    <img id="main-image" src="" alt="" loading="eager">
+                </div>
+                <div class="product-gallery-thumbs" id="gallery-thumbs">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- RIGHT — Product Info -->
+            <div class="product-info">
+
+                <!-- Category -->
+                <a href="#" class="product-info-category" id="product-category"></a>
+
+                <!-- Name -->
+                <h1 id="product-name"></h1>
+                <div class="product-info-ta" id="product-name-ta" style="display:none"></div>
+
+                <!-- Rating -->
+                <div style="display:flex; align-items:center; gap:var(--space-3)">
+                    <div class="stars" id="product-stars">☆☆☆☆☆</div>
+                    <span style="font-size:var(--text-sm); color:var(--color-text-muted)" id="product-review-count">
+                        No reviews yet
+                    </span>
+                </div>
+
+                <!-- Source / Farmer -->
+                <div class="product-info-source" id="product-source" style="display:none">
+                    <span>🧑‍🌾</span>
+                    <span id="product-source-text"></span>
+                </div>
+
+                <hr class="divider">
+
+                <!-- Variant Selector -->
+                <div class="variant-selector">
+                    <label>Select Weight / Size</label>
+                    <div class="variant-options" id="variant-options">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Price Block -->
+                <div class="price-block" id="price-block">
+                    <span class="price" id="display-price">₹0</span>
+                    <span class="price-original" id="original-price" style="display:none"></span>
+                    <span class="price-drop-badge" id="discount-badge" style="display:none"></span>
+                </div>
+
+                <!-- Stock Info -->
+                <div id="stock-info" style="font-size:var(--text-sm)"></div>
+
+                <!-- Add to Cart Row -->
+                <div class="add-to-cart-row">
+                    <div class="qty-selector">
+                        <button class="qty-btn" onclick="changeQty(-1)">−</button>
+                        <input class="qty-value" type="number" id="qty-input" value="1" min="1" max="99" readonly>
+                        <button class="qty-btn" onclick="changeQty(1)">+</button>
+                    </div>
+                    <button
+                        class="btn btn-accent btn-lg"
+                        style="flex:1"
+                        id="add-to-cart-btn"
+                        onclick="addToCart()"
+                    >
+                        <i class="ph ph-shopping-cart"></i>
+                        Add to Cart
+                    </button>
+                </div>
+
+                <!-- Buy Now -->
+                <button
+                    class="btn btn-primary btn-full"
+                    id="buy-now-btn"
+                    onclick="buyNow()"
+                >
+                    Buy Now — Pay at Checkout
+                </button>
+
+                <hr class="divider">
+
+                <!-- Short Description -->
+                <div id="product-short-desc" style="font-size:var(--text-sm); color:var(--color-text-secondary); line-height:1.7"></div>
+
+                <!-- Badges -->
+                <div style="display:flex; gap:var(--space-3); flex-wrap:wrap">
+                    <span class="badge badge-primary">🌿 100% Organic</span>
+                    <span class="badge badge-primary">🚚 Free Shipping ₹500+</span>
+                    <span class="badge badge-success">✅ Quality Guaranteed</span>
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- ══════════════════════════════════════════════════
+             TABS — Description / Reviews / Source
+             ══════════════════════════════════════════════════ -->
+        <div class="product-tabs">
+            <div class="tab-nav">
+                <button class="tab-btn active" onclick="switchTab('description')">Description</button>
+                <button class="tab-btn" onclick="switchTab('reviews')">
+                    Reviews <span id="review-tab-count" class="badge badge-primary" style="margin-left:4px">0</span>
+                </button>
+                <button class="tab-btn" onclick="switchTab('source')">Farmer Info</button>
+            </div>
+
+            <!-- Description Tab -->
+            <div class="tab-panel active" id="tab-description">
+                <div id="product-description"
+                     style="line-height:1.8; color:var(--color-text-secondary); max-width:720px">
+                </div>
+            </div>
+
+            <!-- Reviews Tab -->
+            <div class="tab-panel" id="tab-reviews">
+
+                <!-- Rating Summary -->
+                <div style="display:grid; gap:var(--space-8); margin-bottom:var(--space-8)"
+                     id="reviews-summary-layout">
+                    <div style="text-align:center" id="rating-summary">
+                        <div style="font-size:4rem; font-weight:700; color:var(--color-text); line-height:1"
+                             id="avg-rating">—</div>
+                        <div class="stars" id="avg-stars" style="font-size:1.5rem">☆☆☆☆☆</div>
+                        <div style="color:var(--color-text-muted); font-size:var(--text-sm); margin-top:var(--space-2)"
+                             id="total-reviews-text">No reviews yet</div>
+                    </div>
+                    <div id="rating-bars" style="flex:1">
+                        <!-- Rating bars populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Write Review -->
+                <div id="review-form-section" style="display:none;
+                     background:var(--color-bg-light); border-radius:var(--radius-lg);
+                     padding:var(--space-6); margin-bottom:var(--space-8)">
+                    <h3 style="font-family:var(--font-body); font-size:var(--text-lg);
+                               font-weight:var(--weight-semibold); margin-bottom:var(--space-5)">
+                        Write a Review
+                    </h3>
+
+                    <!-- Star Picker -->
+                    <div style="margin-bottom:var(--space-4)">
+                        <label class="form-label">Your Rating <span class="required">*</span></label>
+                        <div style="display:flex; gap:var(--space-2); margin-top:var(--space-2)">
+                            <span class="star-picker" data-value="1" onclick="setRating(1)">☆</span>
+                            <span class="star-picker" data-value="2" onclick="setRating(2)">☆</span>
+                            <span class="star-picker" data-value="3" onclick="setRating(3)">☆</span>
+                            <span class="star-picker" data-value="4" onclick="setRating(4)">☆</span>
+                            <span class="star-picker" data-value="5" onclick="setRating(5)">☆</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Review Title</label>
+                        <input type="text" class="form-input" id="review-title" placeholder="Summarise your experience">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Your Review</label>
+                        <textarea class="form-textarea" id="review-body"
+                                  placeholder="Tell others about this product..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitReview()">
+                        Submit Review
+                    </button>
+                </div>
+
+                <!-- Reviews List -->
+                <div id="reviews-list">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+
+            </div>
+
+            <!-- Farmer / Source Tab -->
+            <div class="tab-panel" id="tab-source">
+                <div style="max-width:600px">
+                    <div style="font-size:5rem; margin-bottom:var(--space-4)">👨‍🌾</div>
+                    <h3 style="font-family:var(--font-body); font-size:var(--text-xl);
+                               font-weight:var(--weight-semibold); margin-bottom:var(--space-4)">
+                        About the Source
+                    </h3>
+                    <div id="source-detail"
+                         style="font-size:var(--text-base); color:var(--color-text-secondary); line-height:1.8">
+                        Source information not available for this product.
+                    </div>
+                    <div style="margin-top:var(--space-6); padding:var(--space-5);
+                                background:var(--color-bg-light); border-radius:var(--radius-lg);
+                                border-left:4px solid var(--color-primary)">
+                        <p style="font-size:var(--text-sm); color:var(--color-text-secondary)">
+                            🌱 KYFF works directly with small-scale organic farmers across Tamil Nadu —
+                            no middlemen, fair prices, traceable food.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ══════════════════════════════════════════════════
+             RELATED PRODUCTS
+             ══════════════════════════════════════════════════ -->
+        <div style="margin-top:var(--space-16)">
+            <div class="section-header">
+                <h2>You Might Also Like</h2>
+            </div>
+            <div class="products-grid" id="related-products">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     OUT OF STOCK MODAL
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="out-of-stock-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Out of Stock</h3>
+            <button class="modal-close" onclick="closeModal('out-of-stock-modal')">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p>This variant is currently out of stock. We restock regularly!</p>
+            <p style="margin-top:var(--space-3)">Check back soon or explore similar products.</p>
+        </div>
+        <div class="modal-footer">
+            <a href="/products" class="btn btn-primary">Browse Products</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_css %}
+<style>
+.star-picker {
+    font-size : 2rem;
+    cursor    : pointer;
+    color     : var(--color-border-dark);
+    transition: color var(--transition-fast);
+    user-select: none;
+}
+.star-picker.active,
+.star-picker:hover {
+    color : #F4A261;
+}
+
+@media (min-width: 768px) {
+    #reviews-summary-layout {
+        grid-template-columns: 180px 1fr;
+        align-items: center;
+    }
+}
+</style>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ══════════════════════════════════════════════════════════
+   PRODUCT DETAIL PAGE JS
+   ══════════════════════════════════════════════════════════ */
+
+// ── State ──────────────────────────────────────────────────
+let product         = null;
+let selectedVariant = null;
+let selectedRating  = 0;
+const slug          = window.location.pathname.split('/product/')[1];
+
+
+// ── Load Product ───────────────────────────────────────────
+async function loadProduct() {
+    try {
+        const res = await API.get(`/api/products/${slug}`);
+        product   = res.data.product;
+        renderProduct(product);
+        loadReviews(product.id);
+        loadRelatedProducts(product.category_id);
+    } catch (e) {
+        document.getElementById('product-loading').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">😕</div>
+                <h3>Product Not Found</h3>
+                <p>This product may have been removed or the link is incorrect.</p>
+                <a href="/products" class="btn btn-primary">Browse Products</a>
+            </div>
+        `;
+    }
+}
+
+
+// ── Render Product ─────────────────────────────────────────
+function renderProduct(p) {
+    // Breadcrumb
+    document.getElementById('breadcrumb-category').textContent = p.category?.name || 'Products';
+    document.getElementById('breadcrumb-category').href        = `/products?category=${p.category?.slug || ''}`;
+    document.getElementById('breadcrumb-product').textContent  = p.name;
+
+    // Category
+    document.getElementById('product-category').textContent = p.category?.name || '';
+    document.getElementById('product-category').href        = `/products?category=${p.category?.slug || ''}`;
+
+    // Name
+    document.getElementById('product-name').textContent = p.name;
+    document.title = `${p.name} — KYFF`;
+
+    if (p.name_ta) {
+        document.getElementById('product-name-ta').textContent    = p.name_ta;
+        document.getElementById('product-name-ta').style.display  = 'block';
+    }
+
+    // Source
+    if (p.source_info) {
+        document.getElementById('product-source').style.display  = 'flex';
+        document.getElementById('product-source-text').textContent = p.source_info;
+        document.getElementById('source-detail').textContent       = p.source_info;
+    }
+
+    // Description
+    document.getElementById('product-description').textContent = p.description || 'No description available.';
+    document.getElementById('product-short-desc').textContent  = p.short_desc || '';
+
+    // Images
+    const images = p.images?.length > 0
+        ? p.images
+        : [{ image_url: '/static/images/placeholder.png', alt_text: p.name }];
+
+    const mainImg = document.getElementById('main-image');
+    mainImg.src = images[0].image_url;
+    mainImg.alt = images[0].alt_text || p.name;
+
+    const thumbsContainer = document.getElementById('gallery-thumbs');
+    images.forEach((img, i) => {
+        const thumb = document.createElement('div');
+        thumb.className = `gallery-thumb ${i === 0 ? 'active' : ''}`;
+        thumb.innerHTML = `<img src="${img.image_url}" alt="${img.alt_text || p.name}" loading="lazy">`;
+        thumb.onclick   = () => switchImage(img.image_url, img.alt_text, thumb);
+        thumbsContainer.appendChild(thumb);
+    });
+
+    // Variants
+    const variantsContainer = document.getElementById('variant-options');
+    const variants = p.variants || [];
+
+    variants.forEach((v, i) => {
+        const btn = document.createElement('button');
+        btn.className   = `variant-btn ${i === 0 ? 'active' : ''} ${v.stock_qty === 0 ? 'out-of-stock' : ''}`;
+        btn.textContent = v.label;
+        btn.disabled    = v.stock_qty === 0;
+        btn.onclick     = () => selectVariant(v, btn);
+        variantsContainer.appendChild(btn);
+    });
+
+    // Select first variant
+    if (variants.length > 0) {
+        selectVariant(variants[0],
+            variantsContainer.querySelector('.variant-btn'));
+    }
+
+    // Show content
+    document.getElementById('product-loading').style.display = 'none';
+    document.getElementById('product-content').style.display = 'block';
+}
+
+
+// ── Select Variant ─────────────────────────────────────────
+function selectVariant(variant, btnEl) {
+    selectedVariant = variant;
+
+    // Update active button
+    document.querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+
+    // Update price
+    const price     = parseFloat(variant.price);
+    const salePrice = variant.sale_price ? parseFloat(variant.sale_price) : null;
+    const display   = salePrice || price;
+
+    const priceEl    = document.getElementById('display-price');
+    const origEl     = document.getElementById('original-price');
+    const badgeEl    = document.getElementById('discount-badge');
+
+    priceEl.textContent = `₹${display.toFixed(2)}`;
+    priceEl.className   = `price ${salePrice ? 'price-sale' : ''}`;
+
+    if (salePrice && salePrice < price) {
+        origEl.textContent  = `₹${price.toFixed(2)}`;
+        origEl.style.display = 'inline';
+        const pct = Math.round(((price - salePrice) / price) * 100);
+        badgeEl.textContent  = `-${pct}% OFF`;
+        badgeEl.style.display = 'inline-flex';
+    } else {
+        origEl.style.display  = 'none';
+        badgeEl.style.display = 'none';
+    }
+
+    // Stock info
+    const stockInfo = document.getElementById('stock-info');
+    const addBtn    = document.getElementById('add-to-cart-btn');
+    const buyBtn    = document.getElementById('buy-now-btn');
+
+    if (variant.stock_qty === 0) {
+        stockInfo.innerHTML  = `<span style="color:var(--color-error)">❌ Out of stock</span>`;
+        addBtn.disabled      = true;
+        buyBtn.disabled      = true;
+    } else if (variant.stock_qty <= 5) {
+        stockInfo.innerHTML  = `<span style="color:var(--color-warning)">⚠️ Only ${variant.stock_qty} left!</span>`;
+        addBtn.disabled      = false;
+        buyBtn.disabled      = false;
+    } else {
+        stockInfo.innerHTML  = `<span style="color:var(--color-success)">✅ In Stock</span>`;
+        addBtn.disabled      = false;
+        buyBtn.disabled      = false;
+    }
+
+    // Reset qty
+    document.getElementById('qty-input').value = 1;
+}
+
+
+// ── Gallery Image Switch ───────────────────────────────────
+function switchImage(url, alt, thumbEl) {
+    document.getElementById('main-image').src = url;
+    document.getElementById('main-image').alt = alt || '';
+    document.querySelectorAll('.gallery-thumb').forEach(t => t.classList.remove('active'));
+    if (thumbEl) thumbEl.classList.add('active');
+}
+
+
+// ── Quantity ───────────────────────────────────────────────
+function changeQty(delta) {
+    const input  = document.getElementById('qty-input');
+    const max    = selectedVariant?.stock_qty || 99;
+    const newVal = Math.min(max, Math.max(1, parseInt(input.value) + delta));
+    input.value  = newVal;
+}
+
+
+// ── Add to Cart ────────────────────────────────────────────
+async function addToCart() {
+    if (!selectedVariant) return;
+    if (selectedVariant.stock_qty === 0) {
+        openModal('out-of-stock-modal');
+        return;
+    }
+
+    const btn = document.getElementById('add-to-cart-btn');
+    const qty = parseInt(document.getElementById('qty-input').value);
+
+    btn.disabled  = true;
+    btn.classList.add('loading');
+
+    try {
+        await Cart.addItem(selectedVariant.id, qty);
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="ph ph-check"></i> Added to Cart!';
+        showToast(`${product.name} added to cart! 🛒`);
+
+        setTimeout(() => {
+            btn.disabled  = false;
+            btn.innerHTML = '<i class="ph ph-shopping-cart"></i> Add to Cart';
+        }, 2000);
+    } catch (err) {
+        btn.disabled  = false;
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="ph ph-shopping-cart"></i> Add to Cart';
+        showToast(err.message || 'Failed to add to cart', 'error');
+    }
+}
+
+
+// ── Buy Now ────────────────────────────────────────────────
+async function buyNow() {
+    if (!selectedVariant) return;
+
+    try {
+        const qty = parseInt(document.getElementById('qty-input').value);
+        await Cart.addItem(selectedVariant.id, qty);
+        window.location.href = '/checkout';
+    } catch (err) {
+        showToast(err.message || 'Failed. Please try again.', 'error');
+    }
+}
+
+
+// ── Tabs ───────────────────────────────────────────────────
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        const tabs = ['description', 'reviews', 'source'];
+        b.classList.toggle('active', tabs[i] === tab);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+
+// ── Load Reviews ───────────────────────────────────────────
+async function loadReviews(productId) {
+    try {
+        const res     = await API.get(`/api/reviews/product/${productId}`);
+        const reviews = res.data?.reviews || [];
+        const summary = res.data?.summary || {};
+
+        // Update tab count
+        document.getElementById('review-tab-count').textContent = summary.total || 0;
+
+        // Average rating
+        if (summary.average_rating) {
+            document.getElementById('avg-rating').textContent    = summary.average_rating;
+            document.getElementById('avg-stars').innerHTML       = renderStars(summary.average_rating);
+            document.getElementById('total-reviews-text').textContent =
+                `${summary.total} review${summary.total !== 1 ? 's' : ''}`;
+
+            // Navbar stars
+            document.getElementById('product-stars').innerHTML  = renderStars(summary.average_rating);
+            document.getElementById('product-review-count').textContent =
+                `(${summary.total} review${summary.total !== 1 ? 's' : ''})`;
+        }
+
+        // Rating bars
+        const barsContainer = document.getElementById('rating-bars');
+        barsContainer.innerHTML = '';
+        [5,4,3,2,1].forEach(star => {
+            const count = summary.rating_counts?.[star] || 0;
+            const pct   = summary.total > 0 ? Math.round((count / summary.total) * 100) : 0;
+            barsContainer.innerHTML += `
+                <div style="display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-2)">
+                    <span style="font-size:var(--text-xs); width:20px; text-align:right">${star}★</span>
+                    <div style="flex:1; height:8px; background:var(--color-border); border-radius:var(--radius-full); overflow:hidden">
+                        <div style="width:${pct}%; height:100%; background:#F4A261; border-radius:var(--radius-full)"></div>
+                    </div>
+                    <span style="font-size:var(--text-xs); color:var(--color-text-muted); width:30px">${count}</span>
+                </div>
+            `;
+        });
+
+        // Reviews list
+        const listContainer = document.getElementById('reviews-list');
+        if (reviews.length === 0) {
+            listContainer.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <h3>No reviews yet</h3>
+                    <p>Be the first to review this product!</p>
+                </div>
+            `;
+        } else {
+            listContainer.innerHTML = reviews.map(r => `
+                <div class="review-card">
+                    <div class="review-header">
+                        <div>
+                            <div class="reviewer-name">${r.user?.name || 'Customer'}</div>
+                            <div class="stars">${renderStars(r.rating)}</div>
+                        </div>
+                        <div class="review-date">${formatDate(r.created_at)}</div>
+                    </div>
+                    ${r.title ? `<div class="review-title">${r.title}</div>` : ''}
+                    ${r.body  ? `<div class="review-body">${r.body}</div>`   : ''}
+                    <div style="margin-top:var(--space-3)">
+                        <span class="verified-badge">✅ Verified Purchase</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Check if user can review
+        if (Auth.isLoggedIn()) {
+            checkCanReview(productId);
+        }
+
+    } catch (e) {
+        document.getElementById('reviews-list').innerHTML =
+            '<p style="color:var(--color-text-muted); font-size:var(--text-sm)">Unable to load reviews.</p>';
+    }
+}
+
+
+// ── Can Review Check ───────────────────────────────────────
+async function checkCanReview(productId) {
+    try {
+        const res = await API.get(`/api/reviews/can-review/${productId}`);
+        if (res.data?.can_review) {
+            document.getElementById('review-form-section').style.display = 'block';
+        }
+    } catch (e) {}
+}
+
+
+// ── Star Picker ────────────────────────────────────────────
+function setRating(value) {
+    selectedRating = value;
+    document.querySelectorAll('.star-picker').forEach((s, i) => {
+        s.textContent = i < value ? '★' : '☆';
+        s.classList.toggle('active', i < value);
+    });
+}
+
+
+// ── Submit Review ──────────────────────────────────────────
+async function submitReview() {
+    if (!selectedRating) {
+        showToast('Please select a rating', 'warning');
+        return;
+    }
+
+    try {
+        await API.post('/api/reviews/', {
+            product_id : product.id,
+            rating     : selectedRating,
+            title      : document.getElementById('review-title').value.trim() || null,
+            body       : document.getElementById('review-body').value.trim()  || null,
+        });
+
+        document.getElementById('review-form-section').style.display = 'none';
+        showToast('Review submitted! It will appear after approval. ✅');
+        loadReviews(product.id);
+    } catch (err) {
+        showToast(err.message || 'Failed to submit review', 'error');
+    }
+}
+
+
+// ── Related Products ───────────────────────────────────────
+async function loadRelatedProducts(categoryId) {
+    try {
+        const res      = await API.get(`/api/products/?category_id=${categoryId}&per_page=4`);
+        const products = res.data?.products?.filter(p => p.slug !== slug) || [];
+        const container = document.getElementById('related-products');
+        container.innerHTML = '';
+
+        products.slice(0, 4).forEach(p => {
+            const variant      = p.variants?.[0];
+            const price        = variant ? parseFloat(variant.price) : parseFloat(p.base_price);
+            const image        = p.images?.[0]?.image_url || '/static/images/placeholder.png';
+
+            container.innerHTML += `
+                <a href="/product/${p.slug}" class="product-card" style="text-decoration:none">
+                    <div class="product-card-image">
+                        <img src="${image}" alt="${p.name}" loading="lazy"
+                             onerror="this.src='/static/images/placeholder.png'">
+                    </div>
+                    <div class="product-card-body">
+                        <div class="product-card-name">${p.name}</div>
+                        <div class="product-card-footer">
+                            <span class="price">₹${price.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </a>
+            `;
+        });
+    } catch (e) {}
+}
+
+
+// ── Helpers ────────────────────────────────────────────────
+function renderStars(rating) {
+    const full  = Math.floor(rating);
+    const empty = 5 - full;
+    return '★'.repeat(full) + '☆'.repeat(empty);
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric'
+    });
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('open');    }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', loadProduct);
+</script>
+{% endblock %}

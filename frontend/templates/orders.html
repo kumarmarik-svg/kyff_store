@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <div class="container">
+        <h1>My Orders</h1>
+        <div class="breadcrumb">
+            <a href="/">Home</a>
+            <span>›</span>
+            <span>My Orders</span>
+        </div>
+    </div>
+</div>
+
+<div class="container" style="padding-bottom:var(--space-16)">
+
+    <!-- Loading -->
+    <div id="orders-loading" class="loading-overlay">
+        <div class="spinner spinner-lg"></div>
+    </div>
+
+    <!-- Empty -->
+    <div id="orders-empty" style="display:none">
+        <div class="empty-state">
+            <div class="empty-state-icon">📦</div>
+            <h3>No orders yet</h3>
+            <p>Your orders will appear here once you place one!</p>
+            <a href="/products" class="btn btn-primary btn-lg">
+                <i class="ph ph-storefront"></i> Start Shopping
+            </a>
+        </div>
+    </div>
+
+    <!-- Orders List -->
+    <div id="orders-content" style="display:none">
+
+        <!-- Filter Tabs -->
+        <div style="display:flex; gap:var(--space-2); overflow-x:auto;
+                    padding-bottom:var(--space-2); margin-bottom:var(--space-6);
+                    scrollbar-width:none">
+            <button class="tab-btn active" onclick="filterOrders('all')"    id="tab-all">All</button>
+            <button class="tab-btn"        onclick="filterOrders('pending')"    id="tab-pending">Pending</button>
+            <button class="tab-btn"        onclick="filterOrders('confirmed')"  id="tab-confirmed">Confirmed</button>
+            <button class="tab-btn"        onclick="filterOrders('processing')" id="tab-processing">Processing</button>
+            <button class="tab-btn"        onclick="filterOrders('shipped')"    id="tab-shipped">Shipped</button>
+            <button class="tab-btn"        onclick="filterOrders('delivered')"  id="tab-delivered">Delivered</button>
+            <button class="tab-btn"        onclick="filterOrders('cancelled')"  id="tab-cancelled">Cancelled</button>
+        </div>
+
+        <!-- Count -->
+        <p style="font-size:var(--text-sm); color:var(--color-text-muted);
+                  margin-bottom:var(--space-5)">
+            Showing <strong id="orders-count">0</strong> orders
+        </p>
+
+        <!-- Orders -->
+        <div id="orders-list"></div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="orders-pagination" style="display:none"></div>
+
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ══════════════════════════════════════════════════════════
+   ORDERS PAGE JS
+   ══════════════════════════════════════════════════════════ */
+
+let allOrders    = [];
+let activeFilter = 'all';
+let currentPage  = 1;
+const PER_PAGE   = 10;
+
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    if (!Auth.isLoggedIn()) {
+        window.location.href = '/auth/login?next=/orders';
+        return;
+    }
+    loadOrders();
+});
+
+
+// ── Load Orders ────────────────────────────────────────────
+async function loadOrders() {
+    try {
+        const res   = await API.get('/api/orders/');
+        allOrders   = res.data?.orders || [];
+
+        document.getElementById('orders-loading').style.display = 'none';
+
+        if (allOrders.length === 0) {
+            document.getElementById('orders-empty').style.display   = 'flex';
+            return;
+        }
+
+        document.getElementById('orders-content').style.display = 'block';
+        renderOrders();
+
+    } catch (e) {
+        document.getElementById('orders-loading').style.display = 'none';
+        document.getElementById('orders-empty').style.display   = 'flex';
+    }
+}
+
+
+// ── Filter Orders ──────────────────────────────────────────
+function filterOrders(status) {
+    activeFilter = status;
+    currentPage  = 1;
+
+    // Update tabs
+    document.querySelectorAll('[id^="tab-"]').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tab-${status}`).classList.add('active');
+
+    renderOrders();
+}
+
+
+// ── Render Orders ──────────────────────────────────────────
+function renderOrders() {
+    const filtered = activeFilter === 'all'
+        ? allOrders
+        : allOrders.filter(o => o.status === activeFilter);
+
+    document.getElementById('orders-count').textContent = filtered.length;
+
+    const container = document.getElementById('orders-list');
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <h3>No ${activeFilter} orders</h3>
+                <p>You don't have any ${activeFilter} orders.</p>
+            </div>
+        `;
+        document.getElementById('orders-pagination').style.display = 'none';
+        return;
+    }
+
+    // Paginate
+    const start    = (currentPage - 1) * PER_PAGE;
+    const end      = start + PER_PAGE;
+    const paged    = filtered.slice(start, end);
+    const total_pages = Math.ceil(filtered.length / PER_PAGE);
+
+    container.innerHTML = paged.map(order => renderOrderCard(order)).join('');
+
+    // Pagination
+    if (total_pages > 1) {
+        renderPagination(total_pages);
+        document.getElementById('orders-pagination').style.display = 'flex';
+    } else {
+        document.getElementById('orders-pagination').style.display = 'none';
+    }
+}
+
+
+// ── Render Order Card ──────────────────────────────────────
+function renderOrderCard(order) {
+    const items    = order.items || [];
+    const thumbs   = items.slice(0, 3);
+    const extra    = items.length - 3;
+
+    return `
+        <div class="order-card">
+
+            <!-- Header -->
+            <div class="order-card-header">
+                <div>
+                    <div class="order-number"># ${order.order_number}</div>
+                    <div class="order-date">
+                        Placed on ${formatDate(order.created_at)}
+                    </div>
+                </div>
+                <span class="status-badge status-${order.status}">
+                    ${statusIcon(order.status)} ${capitalize(order.status)}
+                </span>
+            </div>
+
+            <!-- Body -->
+            <div class="order-card-body">
+
+                <!-- Item Thumbnails -->
+                <div class="order-items-preview">
+                    ${thumbs.map(item => `
+                        <div class="order-item-thumb">
+                            <img src="${item.variant?.product?.images?.[0]?.image_url
+                                || '/static/images/placeholder.png'}"
+                                 alt="${item.product_name}"
+                                 onerror="this.src='/static/images/placeholder.png'">
+                        </div>
+                    `).join('')}
+                    ${extra > 0 ? `
+                        <div class="order-more-items">+${extra}</div>
+                    ` : ''}
+                </div>
+
+                <!-- Item Names -->
+                <div style="font-size:var(--text-sm); color:var(--color-text-secondary)">
+                    ${items.map(i =>
+                        `${i.product_name} (${i.variant_label}) × ${i.quantity}`
+                    ).join(' · ')}
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="order-card-footer">
+                <div>
+                    <div style="font-size:var(--text-xs); color:var(--color-text-muted)">
+                        Order Total
+                    </div>
+                    <div class="price" style="font-size:var(--text-lg)">
+                        ₹${parseFloat(order.total).toFixed(2)}
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:var(--space-2); flex-wrap:wrap">
+
+                    <!-- Track Button -->
+                    <a href="/orders/${order.order_number}"
+                       class="btn btn-primary btn-sm">
+                        <i class="ph ph-map-pin"></i> Track Order
+                    </a>
+
+                    <!-- Cancel Button — only for pending/confirmed -->
+                    ${['pending','confirmed'].includes(order.status) ? `
+                        <button class="btn btn-outline btn-sm"
+                                style="color:var(--color-error); border-color:var(--color-error)"
+                                onclick="cancelOrder('${order.order_number}')">
+                            <i class="ph ph-x"></i> Cancel
+                        </button>
+                    ` : ''}
+
+                    <!-- Reorder Button — for delivered -->
+                    ${order.status === 'delivered' ? `
+                        <button class="btn btn-outline btn-sm"
+                                onclick="reorder(${JSON.stringify(order.items).replace(/"/g,'&quot;')})">
+                            <i class="ph ph-arrow-counter-clockwise"></i> Reorder
+                        </button>
+                    ` : ''}
+
+                </div>
+            </div>
+
+        </div>
+    `;
+}
+
+
+// ── Cancel Order ───────────────────────────────────────────
+async function cancelOrder(orderNumber) {
+    if (!confirm(`Cancel order #${orderNumber}? This cannot be undone.`)) return;
+
+    try {
+        await API.post(`/api/orders/${orderNumber}/cancel`, {});
+        showToast('Order cancelled successfully');
+        loadOrders();
+    } catch (err) {
+        showToast(err.message || 'Could not cancel order', 'error');
+    }
+}
+
+
+// ── Reorder ────────────────────────────────────────────────
+async function reorder(items) {
+    try {
+        let added = 0;
+        for (const item of items) {
+            if (item.variant_id) {
+                try {
+                    await Cart.addItem(item.variant_id, item.quantity);
+                    added++;
+                } catch (e) {} // skip out-of-stock
+            }
+        }
+        if (added > 0) {
+            showToast(`${added} item${added > 1 ? 's' : ''} added to cart! 🛒`);
+            Cart.refreshBadge();
+        } else {
+            showToast('Some items are no longer available', 'warning');
+        }
+    } catch (err) {
+        showToast('Could not reorder. Please try again.', 'error');
+    }
+}
+
+
+// ── Pagination ─────────────────────────────────────────────
+function renderPagination(totalPages) {
+    const container = document.getElementById('orders-pagination');
+    container.innerHTML = '';
+
+    const prev = document.createElement('button');
+    prev.className = 'pagination-btn';
+    prev.innerHTML = '<i class="ph ph-caret-left"></i>';
+    prev.disabled  = currentPage === 1;
+    prev.onclick   = () => { currentPage--; renderOrders(); scrollToTop(); };
+    container.appendChild(prev);
+
+    for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement('button');
+        btn.className   = `pagination-btn ${i === currentPage ? 'active' : ''}`;
+        btn.textContent = i;
+        btn.onclick     = () => { currentPage = i; renderOrders(); scrollToTop(); };
+        container.appendChild(btn);
+    }
+
+    const next = document.createElement('button');
+    next.className = 'pagination-btn';
+    next.innerHTML = '<i class="ph ph-caret-right"></i>';
+    next.disabled  = currentPage === totalPages;
+    next.onclick   = () => { currentPage++; renderOrders(); scrollToTop(); };
+    container.appendChild(next);
+}
+
+
+// ── Helpers ────────────────────────────────────────────────
+function formatDate(str) {
+    if (!str) return '';
+    return new Date(str).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric'
+    });
+}
+
+function capitalize(str) {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+}
+
+function statusIcon(status) {
+    const icons = {
+        pending    : '🕐',
+        confirmed  : '✅',
+        processing : '⚙️',
+        shipped    : '🚚',
+        delivered  : '📦',
+        cancelled  : '❌',
+        refunded   : '↩️',
+    };
+    return icons[status] || '📋';
+}
+
+function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+{% endblock %}

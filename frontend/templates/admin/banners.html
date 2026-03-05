@@ -1,0 +1,237 @@
+{% extends "admin/base.html" %}
+{% set active_page = "banners" %}
+
+{% block content %}
+
+<div class="admin-page-header">
+    <h1>Banners</h1>
+    <button class="btn btn-primary" onclick="openBannerModal()">
+        <i class="ph ph-plus"></i> Add Banner
+    </button>
+</div>
+
+<div class="admin-table-wrapper">
+    <div style="overflow-x:auto">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Preview</th>
+                    <th>Title</th>
+                    <th>Position</th>
+                    <th>Sort</th>
+                    <th>Schedule</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="banners-tbody">
+                <tr><td colspan="7" style="text-align:center; padding:var(--space-8)">
+                    <div class="spinner" style="margin:0 auto"></div>
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<!-- ── Banner Modal ── -->
+<div class="modal-backdrop" id="banner-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="banner-modal-title">Add Banner</h3>
+            <button class="modal-close" onclick="closeModal('banner-modal')">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Title</label>
+                <input type="text" class="form-input" id="b-title" placeholder="Banner heading">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Image URL <span class="required">*</span></label>
+                <input type="url" class="form-input" id="b-image" placeholder="https://...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Link URL</label>
+                <input type="url" class="form-input" id="b-link" placeholder="/products?sale=true">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4)">
+                <div class="form-group">
+                    <label class="form-label">Position</label>
+                    <select class="form-select" id="b-position">
+                        <option value="hero">Hero</option>
+                        <option value="sidebar">Sidebar</option>
+                        <option value="popup">Popup</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sort Order</label>
+                    <input type="number" class="form-input" id="b-sort" value="0" min="0">
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4)">
+                <div class="form-group">
+                    <label class="form-label">Start Date</label>
+                    <input type="date" class="form-input" id="b-start">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">End Date</label>
+                    <input type="date" class="form-input" id="b-end">
+                </div>
+            </div>
+            <label class="filter-option">
+                <input type="checkbox" id="b-active" checked> Active
+            </label>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('banner-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveBanner()">Save Banner</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+let editingBannerId = null;
+
+document.addEventListener('DOMContentLoaded', loadBanners);
+
+async function loadBanners() {
+    try {
+        const res     = await API.get('/api/admin/banners');
+        const banners = res.data?.banners || [];
+        const tbody   = document.getElementById('banners-tbody');
+
+        if (banners.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;
+                color:var(--color-text-muted); padding:var(--space-8)">
+                No banners yet</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = banners.map(b => `
+            <tr>
+                <td>
+                    <img src="${b.image_url}" alt="${b.title||''}"
+                         style="width:80px; height:45px; object-fit:cover;
+                                border-radius:var(--radius-sm)"
+                         onerror="this.style.display='none'">
+                </td>
+                <td>${b.title || '—'}</td>
+                <td><span class="badge badge-primary">${b.position}</span></td>
+                <td>${b.sort_order}</td>
+                <td style="font-size:var(--text-xs); color:var(--color-text-muted)">
+                    ${b.start_date ? b.start_date : '—'} →
+                    ${b.end_date   ? b.end_date   : '∞'}
+                </td>
+                <td>
+                    <span class="badge ${b.is_active ? 'badge-success' : 'badge-error'}">
+                        ${b.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td>
+                    <div class="admin-table-actions">
+                        <button class="btn btn-outline btn-sm"
+                                onclick="editBanner(${JSON.stringify(b).replace(/"/g,'&quot;')})">
+                            <i class="ph ph-pencil"></i>
+                        </button>
+                        <button class="btn btn-ghost btn-sm"
+                                style="color:var(--color-error)"
+                                onclick="deleteBanner(${b.id})">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (e) {
+        showToast('Failed to load banners', 'error');
+    }
+}
+
+function openBannerModal() {
+    editingBannerId = null;
+    document.getElementById('banner-modal-title').textContent = 'Add Banner';
+    ['b-title','b-image','b-link','b-start','b-end'].forEach(id =>
+        document.getElementById(id).value = '');
+    document.getElementById('b-position').value = 'hero';
+    document.getElementById('b-sort').value     = '0';
+    document.getElementById('b-active').checked = true;
+    document.getElementById('banner-modal').classList.add('open');
+}
+
+function editBanner(b) {
+    editingBannerId = b.id;
+    document.getElementById('banner-modal-title').textContent = 'Edit Banner';
+    document.getElementById('b-title').value    = b.title      || '';
+    document.getElementById('b-image').value    = b.image_url  || '';
+    document.getElementById('b-link').value     = b.link_url   || '';
+    document.getElementById('b-position').value = b.position   || 'hero';
+    document.getElementById('b-sort').value     = b.sort_order || 0;
+    document.getElementById('b-start').value    = b.start_date || '';
+    document.getElementById('b-end').value      = b.end_date   || '';
+    document.getElementById('b-active').checked = b.is_active;
+    document.getElementById('banner-modal').classList.add('open');
+}
+
+async function saveBanner() {
+    const image = document.getElementById('b-image').value.trim();
+    if (!image) { showToast('Image URL is required', 'warning'); return; }
+
+    const payload = {
+        title      : document.getElementById('b-title').value.trim()    || null,
+        image_url  : image,
+        link_url   : document.getElementById('b-link').value.trim()     || null,
+        position   : document.getElementById('b-position').value,
+        sort_order : parseInt(document.getElementById('b-sort').value)  || 0,
+        start_date : document.getElementById('b-start').value           || null,
+        end_date   : document.getElementById('b-end').value             || null,
+        is_active  : document.getElementById('b-active').checked,
+    };
+
+    try {
+        if (editingBannerId) {
+            await API.patch(`/api/admin/banners/${editingBannerId}`, payload);
+            showToast('Banner updated ✅');
+        } else {
+            await API.post('/api/admin/banners', payload);
+            showToast('Banner created ✅');
+        }
+        closeModal('banner-modal');
+        loadBanners();
+    } catch (err) {
+        showToast(err.message || 'Save failed', 'error');
+    }
+}
+
+async function deleteBanner(id) {
+    if (!confirm('Delete this banner?')) return;
+    try {
+        await API.delete(`/api/admin/banners/${id}`);
+        showToast('Banner deleted');
+        loadBanners();
+    } catch (err) {
+        showToast(err.message || 'Failed', 'error');
+    }
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('open');    }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+</script>
+{% endblock %}
+```
+
+---
+
+## Progress
+```
+Frontend:
+  All CSS             ✅
+  All HTML Templates  ✅
+  JS files (4)        ← next (api.js, auth.js, cart.js, main.js)
+  Flask Routes        ← after JS

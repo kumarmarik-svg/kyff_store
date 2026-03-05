@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <div class="container">
+        <h1 id="detail-title">Order Details</h1>
+        <div class="breadcrumb">
+            <a href="/">Home</a>
+            <span>›</span>
+            <a href="/orders">My Orders</a>
+            <span>›</span>
+            <span id="detail-breadcrumb">Order</span>
+        </div>
+    </div>
+</div>
+
+<div class="container" style="padding-bottom:var(--space-16)">
+
+    <!-- Loading -->
+    <div id="detail-loading" class="loading-overlay">
+        <div class="spinner spinner-lg"></div>
+    </div>
+
+    <!-- Content -->
+    <div id="detail-content" style="display:none">
+        <div style="display:grid; gap:var(--space-6)">
+
+            <!-- Grid: Left + Right -->
+            <div style="display:grid; gap:var(--space-6)" id="detail-grid">
+
+                <!-- ── LEFT ── -->
+                <div style="display:flex; flex-direction:column; gap:var(--space-6)">
+
+                    <!-- Status Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Order Status</h3>
+                            <span class="status-badge" id="detail-status-badge"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="timeline" id="order-timeline">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Items Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Items Ordered</h3>
+                            <span style="font-size:var(--text-sm); color:var(--color-text-muted)"
+                                  id="items-count"></span>
+                        </div>
+                        <div class="card-body" style="padding:0">
+                            <div id="detail-items"></div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ── RIGHT ── -->
+                <div style="display:flex; flex-direction:column; gap:var(--space-6)">
+
+                    <!-- Summary Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Order Summary</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="summary-row">
+                                <span>Order Number</span>
+                                <strong id="sum-number"></strong>
+                            </div>
+                            <div class="summary-row">
+                                <span>Order Date</span>
+                                <span id="sum-date"></span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Payment</span>
+                                <span id="sum-payment"></span>
+                            </div>
+                            <hr class="divider">
+                            <div class="summary-row">
+                                <span>Subtotal</span>
+                                <span>₹<span id="sum-subtotal"></span></span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Shipping</span>
+                                <span id="sum-shipping"></span>
+                            </div>
+                            <div class="summary-row" id="sum-discount-row" style="display:none">
+                                <span>Discount</span>
+                                <span style="color:var(--color-success)">
+                                    −₹<span id="sum-discount"></span>
+                                </span>
+                            </div>
+                            <div class="summary-row total">
+                                <span>Total Paid</span>
+                                <span>₹<span id="sum-total"></span></span>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="card-footer" style="display:flex; gap:var(--space-3)">
+                            <button class="btn btn-outline btn-sm"
+                                    onclick="reorderAll()" id="reorder-btn">
+                                <i class="ph ph-arrow-counter-clockwise"></i> Reorder
+                            </button>
+                            <button class="btn btn-outline btn-sm"
+                                    style="color:var(--color-error); border-color:var(--color-error)"
+                                    id="cancel-btn"
+                                    onclick="cancelThisOrder()"
+                                    style="display:none">
+                                <i class="ph ph-x"></i> Cancel Order
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Delivery Address Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Delivery Address</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="delivery-address"
+                                 style="font-size:var(--text-sm);
+                                        color:var(--color-text-secondary);
+                                        line-height:1.8">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notes Card -->
+                    <div class="card" id="notes-card" style="display:none">
+                        <div class="card-header"><h3>Delivery Notes</h3></div>
+                        <div class="card-body">
+                            <p style="font-size:var(--text-sm);
+                                      color:var(--color-text-secondary)"
+                               id="detail-notes"></p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_css %}
+<style>
+@media (min-width: 1024px) {
+    #detail-grid {
+        grid-template-columns: 1fr 380px;
+        align-items: start;
+    }
+}
+</style>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ══════════════════════════════════════════════════════════
+   ORDER DETAIL PAGE JS
+   ══════════════════════════════════════════════════════════ */
+
+const orderNumber = window.location.pathname.split('/orders/')[1];
+let   orderData   = null;
+
+const ORDER_STEPS = [
+    { status: 'pending',    label: 'Order Placed',   icon: '📋' },
+    { status: 'confirmed',  label: 'Confirmed',       icon: '✅' },
+    { status: 'processing', label: 'Processing',      icon: '⚙️' },
+    { status: 'shipped',    label: 'Shipped',         icon: '🚚' },
+    { status: 'delivered',  label: 'Delivered',       icon: '📦' },
+];
+
+const STATUS_ORDER = ['pending','confirmed','processing','shipped','delivered'];
+
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    if (!Auth.isLoggedIn()) {
+        window.location.href = '/auth/login?next=' + window.location.pathname;
+        return;
+    }
+    loadOrderDetail();
+});
+
+
+// ── Load Order ─────────────────────────────────────────────
+async function loadOrderDetail() {
+    try {
+        const res  = await API.get(`/api/orders/${orderNumber}`);
+        orderData  = res.data?.order;
+
+        document.getElementById('detail-loading').style.display = 'none';
+        document.getElementById('detail-content').style.display = 'block';
+
+        renderOrderDetail(orderData);
+
+    } catch (e) {
+        document.getElementById('detail-loading').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">😕</div>
+                <h3>Order Not Found</h3>
+                <p>We couldn't find this order.</p>
+                <a href="/orders" class="btn btn-primary">My Orders</a>
+            </div>
+        `;
+    }
+}
+
+
+// ── Render Order ───────────────────────────────────────────
+function renderOrderDetail(order) {
+
+    // Page title
+    document.title = `Order #${order.order_number} — KYFF`;
+    document.getElementById('detail-title').textContent     = `Order #${order.order_number}`;
+    document.getElementById('detail-breadcrumb').textContent = `#${order.order_number}`;
+
+    // Status badge
+    const badge = document.getElementById('detail-status-badge');
+    badge.className   = `status-badge status-${order.status}`;
+    badge.textContent = `${statusIcon(order.status)} ${capitalize(order.status)}`;
+
+    // Timeline
+    renderTimeline(order.status);
+
+    // Items
+    renderItems(order.items || []);
+
+    // Summary
+    document.getElementById('sum-number').textContent   = order.order_number;
+    document.getElementById('sum-date').textContent     = formatDate(order.created_at);
+    document.getElementById('sum-subtotal').textContent = parseFloat(order.subtotal).toFixed(2);
+    document.getElementById('sum-total').textContent    = parseFloat(order.total).toFixed(2);
+
+    // Shipping
+    const shipEl = document.getElementById('sum-shipping');
+    if (parseFloat(order.shipping_charge) === 0) {
+        shipEl.innerHTML = '<span style="color:var(--color-success)">FREE</span>';
+    } else {
+        shipEl.textContent = `₹${parseFloat(order.shipping_charge).toFixed(2)}`;
+    }
+
+    // Discount
+    if (parseFloat(order.discount_amount) > 0) {
+        document.getElementById('sum-discount-row').style.display = 'flex';
+        document.getElementById('sum-discount').textContent =
+            parseFloat(order.discount_amount).toFixed(2);
+    }
+
+    // Payment method
+    const payment = order.payments?.[0];
+    document.getElementById('sum-payment').textContent =
+        payment ? `${capitalize(payment.gateway)} — ${capitalize(payment.status)}` : 'Pending';
+
+    // Delivery address
+    document.getElementById('delivery-address').innerHTML = `
+        <strong>${order.shipping_name}</strong><br>
+        ${order.shipping_line1}
+        ${order.shipping_line2 ? '<br>' + order.shipping_line2 : ''}<br>
+        ${order.shipping_city}, ${order.shipping_state} — ${order.shipping_pincode}<br>
+        📞 ${order.shipping_phone}
+    `;
+
+    // Notes
+    if (order.notes) {
+        document.getElementById('notes-card').style.display  = 'block';
+        document.getElementById('detail-notes').textContent  = order.notes;
+    }
+
+    // Cancel button
+    if (['pending','confirmed'].includes(order.status)) {
+        document.getElementById('cancel-btn').style.display = 'inline-flex';
+    }
+}
+
+
+// ── Timeline ───────────────────────────────────────────────
+function renderTimeline(currentStatus) {
+    const container    = document.getElementById('order-timeline');
+    container.innerHTML = '';
+
+    if (currentStatus === 'cancelled') {
+        container.innerHTML = `
+            <div class="timeline-item cancelled">
+                <div class="timeline-dot">❌</div>
+                <div class="timeline-content">
+                    <h4>Order Cancelled</h4>
+                    <p>This order has been cancelled</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    if (currentStatus === 'refunded') {
+        container.innerHTML = `
+            <div class="timeline-item cancelled">
+                <div class="timeline-dot">↩️</div>
+                <div class="timeline-content">
+                    <h4>Order Refunded</h4>
+                    <p>Refund has been processed</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    const currentIdx = STATUS_ORDER.indexOf(currentStatus);
+
+    ORDER_STEPS.forEach((step, i) => {
+        const isCompleted = i < currentIdx;
+        const isCurrent   = i === currentIdx;
+
+        const item = document.createElement('div');
+        item.className = `timeline-item ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''}`;
+        item.innerHTML = `
+            <div class="timeline-dot">
+                ${isCompleted ? '✓' : step.icon}
+            </div>
+            <div class="timeline-content">
+                <h4>${step.label}</h4>
+                <p>${isCurrent ? 'Current status' : isCompleted ? 'Completed' : 'Pending'}</p>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+
+// ── Items List ─────────────────────────────────────────────
+function renderItems(items) {
+    document.getElementById('items-count').textContent =
+        `${items.length} item${items.length !== 1 ? 's' : ''}`;
+
+    const container = document.getElementById('detail-items');
+    container.innerHTML = items.map((item, i) => {
+        const image = item.variant?.product?.images?.[0]?.image_url
+            || '/static/images/placeholder.png';
+        const isLast = i === items.length - 1;
+
+        return `
+            <div style="display:flex; gap:var(--space-4); padding:var(--space-5);
+                        ${!isLast ? 'border-bottom:1px solid var(--color-border)' : ''}">
+                <a href="/product/${item.variant?.product?.slug || '#'}">
+                    <img src="${image}" alt="${item.product_name}"
+                         style="width:72px; height:72px; object-fit:cover;
+                                border-radius:var(--radius-md); flex-shrink:0"
+                         onerror="this.src='/static/images/placeholder.png'">
+                </a>
+                <div style="flex:1">
+                    <div style="font-weight:var(--weight-semibold);
+                                font-size:var(--text-base)">
+                        ${item.product_name}
+                    </div>
+                    <div style="font-size:var(--text-sm); color:var(--color-text-muted);
+                                margin-top:2px">
+                        ${item.variant_label} × ${item.quantity}
+                    </div>
+                    <div style="margin-top:var(--space-2)">
+                        <span style="font-size:var(--text-sm); color:var(--color-text-muted)">
+                            ₹${parseFloat(item.unit_price).toFixed(2)} each
+                        </span>
+                    </div>
+                </div>
+                <div style="text-align:right; flex-shrink:0">
+                    <div class="price" style="font-size:var(--text-base)">
+                        ₹${parseFloat(item.line_total).toFixed(2)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+// ── Cancel Order ───────────────────────────────────────────
+async function cancelThisOrder() {
+    if (!confirm(`Cancel order #${orderNumber}? This cannot be undone.`)) return;
+
+    try {
+        await API.post(`/api/orders/${orderNumber}/cancel`, {});
+        showToast('Order cancelled successfully');
+        loadOrderDetail();
+    } catch (err) {
+        showToast(err.message || 'Could not cancel order', 'error');
+    }
+}
+
+
+// ── Reorder All ────────────────────────────────────────────
+async function reorderAll() {
+    if (!orderData?.items) return;
+
+    let added = 0;
+    for (const item of orderData.items) {
+        if (item.variant_id) {
+            try {
+                await Cart.addItem(item.variant_id, item.quantity);
+                added++;
+            } catch (e) {}
+        }
+    }
+
+    if (added > 0) {
+        showToast(`${added} item${added > 1 ? 's' : ''} added to cart! 🛒`);
+        Cart.refreshBadge();
+    } else {
+        showToast('Some items are no longer available', 'warning');
+    }
+}
+
+
+// ── Helpers ────────────────────────────────────────────────
+function formatDate(str) {
+    if (!str) return '';
+    return new Date(str).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'long', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
+function capitalize(str) {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+}
+
+function statusIcon(status) {
+    const icons = {
+        pending:'🕐', confirmed:'✅', processing:'⚙️',
+        shipped:'🚚', delivered:'📦', cancelled:'❌', refunded:'↩️'
+    };
+    return icons[status] || '📋';
+}
+</script>
+{% endblock %}

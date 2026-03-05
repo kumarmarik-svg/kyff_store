@@ -1,0 +1,209 @@
+{% extends "admin/base.html" %}
+{% set active_page = "orders" %}
+
+{% block content %}
+
+<div class="admin-page-header">
+    <h1>Orders</h1>
+</div>
+
+<!-- Toolbar -->
+<div style="display:flex; gap:var(--space-3); flex-wrap:wrap; margin-bottom:var(--space-6)">
+    <input type="search" class="form-input" id="order-search"
+           placeholder="Search order number or customer..."
+           style="max-width:300px"
+           oninput="debounce(loadOrders, 400)()">
+    <select class="sort-select" id="order-status-filter" onchange="loadOrders()">
+        <option value="">All Statuses</option>
+        <option value="pending">Pending</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="processing">Processing</option>
+        <option value="shipped">Shipped</option>
+        <option value="delivered">Delivered</option>
+        <option value="cancelled">Cancelled</option>
+        <option value="refunded">Refunded</option>
+    </select>
+</div>
+
+<!-- Table -->
+<div class="admin-table-wrapper">
+    <div style="overflow-x:auto">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Order #</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Items</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="orders-tbody">
+                <tr><td colspan="7" style="text-align:center; padding:var(--space-8)">
+                    <div class="spinner" style="margin:0 auto"></div>
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination -->
+<div class="pagination" id="orders-pag" style="margin-top:var(--space-6)"></div>
+
+
+<!-- ── Status Update Modal ── -->
+<div class="modal-backdrop" id="status-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Update Order Status</h3>
+            <button class="modal-close" onclick="closeModal('status-modal')">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom:var(--space-4); font-size:var(--text-sm);
+                      color:var(--color-text-muted)">
+                Order: <strong id="modal-order-num"></strong>
+            </p>
+            <div class="form-group">
+                <label class="form-label">New Status</label>
+                <select class="form-select" id="modal-new-status">
+                    <option value="pending">Pending</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="processing">Processing</option>
+                    <option value="shipped">Shipped</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="refunded">Refunded</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('status-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="confirmStatusUpdate()">Update</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+let currentPage   = 1;
+let editingOrder  = null;
+
+document.addEventListener('DOMContentLoaded', loadOrders);
+
+// Debounce helper
+function debounce(fn, delay) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+
+async function loadOrders() {
+    const search = document.getElementById('order-search').value.trim();
+    const status = document.getElementById('order-status-filter').value;
+
+    const params = new URLSearchParams({ page: currentPage, per_page: 15 });
+    if (search) params.set('q',      search);
+    if (status) params.set('status', status);
+
+    try {
+        const res    = await API.get(`/api/admin/orders?${params}`);
+        const orders = res.data?.orders || [];
+        const pag    = res.data?.pagination || {};
+        const tbody  = document.getElementById('orders-tbody');
+
+        if (orders.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;
+                color:var(--color-text-muted); padding:var(--space-8)">
+                No orders found</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = orders.map(o => `
+            <tr>
+                <td><strong>${o.order_number}</strong></td>
+                <td>${o.user?.name || 'Guest'}<br>
+                    <span style="font-size:var(--text-xs); color:var(--color-text-muted)">
+                        ${o.user?.email || ''}
+                    </span>
+                </td>
+                <td>${formatDate(o.created_at)}</td>
+                <td>${o.items?.length || 0} items</td>
+                <td><strong>₹${parseFloat(o.total).toFixed(2)}</strong></td>
+                <td><span class="status-badge status-${o.status}">
+                    ${capitalize(o.status)}
+                </span></td>
+                <td>
+                    <div class="admin-table-actions">
+                        <button class="btn btn-primary btn-sm"
+                                onclick="openStatusModal('${o.order_number}','${o.status}')">
+                            Update
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+        renderPagination(pag, 'orders-pag');
+
+    } catch (e) {
+        showToast('Failed to load orders', 'error');
+    }
+}
+
+function openStatusModal(orderNum, currentStatus) {
+    editingOrder = orderNum;
+    document.getElementById('modal-order-num').textContent  = orderNum;
+    document.getElementById('modal-new-status').value       = currentStatus;
+    document.getElementById('status-modal').classList.add('open');
+}
+
+async function confirmStatusUpdate() {
+    const newStatus = document.getElementById('modal-new-status').value;
+    try {
+        await API.patch(`/api/admin/orders/${editingOrder}/status`, { status: newStatus });
+        closeModal('status-modal');
+        showToast('Order status updated ✅');
+        loadOrders();
+    } catch (err) {
+        showToast(err.message || 'Update failed', 'error');
+    }
+}
+
+function renderPagination(pag, containerId) {
+    const c = document.getElementById(containerId);
+    if (!pag.total_pages || pag.total_pages <= 1) { c.innerHTML = ''; return; }
+    c.innerHTML = '';
+
+    const prev = document.createElement('button');
+    prev.className = 'pagination-btn';
+    prev.innerHTML = '<i class="ph ph-caret-left"></i>';
+    prev.disabled  = !pag.has_prev;
+    prev.onclick   = () => { currentPage--; loadOrders(); };
+    c.appendChild(prev);
+
+    for (let i = 1; i <= pag.total_pages; i++) {
+        const btn = document.createElement('button');
+        btn.className   = `pagination-btn ${i === pag.page ? 'active' : ''}`;
+        btn.textContent = i;
+        btn.onclick     = () => { currentPage = i; loadOrders(); };
+        c.appendChild(btn);
+    }
+
+    const next = document.createElement('button');
+    next.className = 'pagination-btn';
+    next.innerHTML = '<i class="ph ph-caret-right"></i>';
+    next.disabled  = !pag.has_next;
+    next.onclick   = () => { currentPage++; loadOrders(); };
+    c.appendChild(next);
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('open');    }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+</script>
+{% endblock %}

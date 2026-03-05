@@ -43,8 +43,15 @@ class Product(db.Model):
     reviews  = db.relationship("Review",         back_populates="product", cascade="all, delete-orphan", lazy="dynamic")
 
     # Methods
+    # def primary_image(self):
+      #  return self.images.filter_by(is_primary=True).first()
+    
     def primary_image(self):
-        return self.images.filter_by(is_primary=True).first()
+        primary = self.images.filter_by(is_primary=True).first()
+        if primary:
+            return primary
+        # Fallback to first image
+        return self.images.order_by('sort_order').first()
 
     def active_variants(self):
         return self.variants.filter_by(is_active=True).all()

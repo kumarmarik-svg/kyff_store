@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- ══════════════════════════════════════════════════════════
+     HERO BANNER
+     ══════════════════════════════════════════════════════════ -->
+<section class="hero" id="hero">
+    <!-- Slides — populated by JS -->
+    <div id="hero-slides"></div>
+
+    <!-- Static fallback while JS loads -->
+    <div class="hero-slide" id="hero-fallback">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-tag">
+                    🌾 Direct from Tamil Nadu Farmers
+                </div>
+                <h1>Pure Food.<br>Real Farmers.<br>Your Table.</h1>
+                <p>Organic millets, cold-pressed oils, and traditional foods — sourced directly from local farmers.</p>
+                <div class="hero-btns">
+                    <a href="/products" class="btn btn-accent btn-lg">Shop Now</a>
+                    <a href="/products?featured=true" class="btn btn-lg" style="background:rgba(255,255,255,0.15); color:white; border-color:rgba(255,255,255,0.4);">Our Story</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dots -->
+    <div class="hero-dots" id="hero-dots"></div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     USP STRIP
+     ══════════════════════════════════════════════════════════ -->
+<div class="usp-strip">
+    <div class="container">
+        <div class="usp-grid">
+            <div class="usp-item">
+                <div class="usp-icon">🌿</div>
+                <h4>100% Organic</h4>
+                <p>No chemicals, no preservatives</p>
+            </div>
+            <div class="usp-item">
+                <div class="usp-icon">👨‍🌾</div>
+                <h4>Direct from Farmers</h4>
+                <p>Know who grew your food</p>
+            </div>
+            <div class="usp-item">
+                <div class="usp-icon">🚚</div>
+                <h4>Free Shipping</h4>
+                <p>On orders above ₹500</p>
+            </div>
+            <div class="usp-item">
+                <div class="usp-icon">💚</div>
+                <h4>Fresh Guarantee</h4>
+                <p>Or we replace it, no questions</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     CATEGORIES
+     ══════════════════════════════════════════════════════════ -->
+<section class="section">
+    <div class="container">
+        <div class="section-header">
+            <div>
+                <h2>Shop by Category</h2>
+                <p>Find exactly what you're looking for</p>
+            </div>
+            <a href="/products" class="btn btn-outline btn-sm hide-mobile">View All</a>
+        </div>
+
+        <div class="category-chips" id="category-chips">
+            <!-- Skeleton loading -->
+            <div class="category-chip" style="pointer-events:none">
+                <div class="skeleton" style="width:40px; height:40px; border-radius:50%"></div>
+                <div class="skeleton skeleton-text" style="width:60px"></div>
+            </div>
+            <div class="category-chip" style="pointer-events:none">
+                <div class="skeleton" style="width:40px; height:40px; border-radius:50%"></div>
+                <div class="skeleton skeleton-text" style="width:60px"></div>
+            </div>
+            <div class="category-chip" style="pointer-events:none">
+                <div class="skeleton" style="width:40px; height:40px; border-radius:50%"></div>
+                <div class="skeleton skeleton-text" style="width:60px"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     FEATURED PRODUCTS
+     ══════════════════════════════════════════════════════════ -->
+<section class="section" style="background:var(--color-bg-light); padding-top:0;">
+    <div class="container">
+        <div class="section-header">
+            <div>
+                <h2>Featured Products</h2>
+                <p>Handpicked by our team — the best of what we offer</p>
+            </div>
+            <a href="/products?featured=true" class="btn btn-outline btn-sm hide-mobile">See All</a>
+        </div>
+
+        <!-- Products Grid -->
+        <div class="products-grid" id="featured-products">
+            <!-- Skeleton Cards -->
+            <div class="product-card">
+                <div class="product-card-image skeleton"></div>
+                <div class="product-card-body">
+                    <div class="skeleton skeleton-text" style="width:60%"></div>
+                    <div class="skeleton skeleton-text"></div>
+                    <div class="skeleton skeleton-text" style="width:40%"></div>
+                </div>
+            </div>
+            <div class="product-card">
+                <div class="product-card-image skeleton"></div>
+                <div class="product-card-body">
+                    <div class="skeleton skeleton-text" style="width:60%"></div>
+                    <div class="skeleton skeleton-text"></div>
+                    <div class="skeleton skeleton-text" style="width:40%"></div>
+                </div>
+            </div>
+            <div class="product-card hide-mobile">
+                <div class="product-card-image skeleton"></div>
+                <div class="product-card-body">
+                    <div class="skeleton skeleton-text" style="width:60%"></div>
+                    <div class="skeleton skeleton-text"></div>
+                    <div class="skeleton skeleton-text" style="width:40%"></div>
+                </div>
+            </div>
+            <div class="product-card hide-mobile">
+                <div class="product-card-image skeleton"></div>
+                <div class="product-card-body">
+                    <div class="skeleton skeleton-text" style="width:60%"></div>
+                    <div class="skeleton skeleton-text"></div>
+                    <div class="skeleton skeleton-text" style="width:40%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     RECOMMENDATIONS (Personalized / Trending)
+     ══════════════════════════════════════════════════════════ -->
+<section class="section">
+    <div class="container">
+        <div class="recommendations-section" id="recommendations-section">
+            <div class="section-header" style="margin-bottom:var(--space-6)">
+                <div>
+                    <h2 id="recommendations-title">Trending This Week</h2>
+                    <p id="recommendations-subtitle">Most ordered by our customers</p>
+                </div>
+            </div>
+            <div class="products-grid" id="recommendations-products">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     FARMER STORY BANNER
+     ══════════════════════════════════════════════════════════ -->
+<section class="section" style="background:var(--color-primary-dark); padding:var(--space-12) 0;">
+    <div class="container">
+        <div style="display:grid; gap:var(--space-8); align-items:center;"
+             class="farmer-banner-grid">
+            <div>
+                <div class="hero-tag" style="margin-bottom:var(--space-4)">
+                    👨‍🌾 Our Farmers
+                </div>
+                <h2 style="color:white; font-size:var(--text-3xl); margin-bottom:var(--space-4);">
+                    Every product has a farmer behind it
+                </h2>
+                <p style="color:rgba(255,255,255,0.8); font-size:var(--text-lg); margin-bottom:var(--space-6); max-width:480px;">
+                    KYFF works directly with small-scale organic farmers across Tamil Nadu.
+                    When you buy from us, you support them directly — no middlemen.
+                </p>
+                <a href="/products?source=farmer" class="btn btn-accent btn-lg">
+                    Shop by Farmer
+                </a>
+            </div>
+            <div style="text-align:center; opacity:0.9;">
+                <div style="font-size:8rem; line-height:1;">🌾</div>
+                <p style="color:rgba(255,255,255,0.7); margin-top:var(--space-4);">
+                    Supporting 50+ farmers across Tamil Nadu
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     ALL PRODUCTS PREVIEW
+     ══════════════════════════════════════════════════════════ -->
+<section class="section">
+    <div class="container">
+        <div class="section-header">
+            <div>
+                <h2>Fresh Arrivals</h2>
+                <p>New products added every week</p>
+            </div>
+            <a href="/products" class="btn btn-outline btn-sm hide-mobile">View All Products</a>
+        </div>
+
+        <div class="products-grid" id="new-products">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Mobile View All -->
+        <div style="text-align:center; margin-top:var(--space-8);" class="show-mobile">
+            <a href="/products" class="btn btn-primary btn-lg">View All Products</a>
+        </div>
+    </div>
+</section>
+
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ══════════════════════════════════════════════════════════
+   HOMEPAGE JS
+   ══════════════════════════════════════════════════════════ */
+
+// ── Category Icons Map ─────────────────────────────────────
+const CATEGORY_ICONS = {
+    'grains'      : '🌾',
+    'millets'     : '🌿',
+    'rice'        : '🍚',
+    'oils'        : '🫙',
+    'spices'      : '🌶️',
+    'lentils'     : '🫘',
+    'personal'    : '🧴',
+    'snacks'      : '🥜',
+    'flours'      : '🌾',
+    'default'     : '🌱',
+};
+
+function getCategoryIcon(slug) {
+    for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
+        if (slug.includes(key)) return icon;
+    }
+    return CATEGORY_ICONS.default;
+}
+
+// ── Render Product Card ────────────────────────────────────
+function renderProductCard(product) {
+    const variant     = product.variants?.[0];
+    const price       = variant ? parseFloat(variant.price) : parseFloat(product.base_price);
+    const salePrice   = variant?.sale_price ? parseFloat(variant.sale_price) : null;
+    const displayPrice = salePrice || price;
+    const hasDiscount  = salePrice && salePrice < price;
+    const discountPct  = hasDiscount
+        ? Math.round(((price - salePrice) / price) * 100)
+        : 0;
+
+    const image = product.images?.[0]?.image_url || '/static/images/placeholder.png';
+
+    return `
+        <div class="product-card">
+            <a href="/product/${product.slug}" class="product-card-image">
+                <img
+                    src="${image}"
+                    alt="${product.name}"
+                    loading="lazy"
+                    onerror="this.src='/static/images/placeholder.png'"
+                >
+                <div class="product-card-badges">
+                    ${hasDiscount ? `<span class="badge-sale">-${discountPct}%</span>` : ''}
+                    ${product.is_featured ? `<span class="badge-featured">Featured</span>` : ''}
+                </div>
+                <div class="product-card-quick-add">
+                    <button
+                        class="btn btn-accent btn-full btn-sm"
+                        onclick="quickAdd(event, ${variant?.id || 'null'}, '${product.name}')"
+                    >
+                        <i class="ph ph-shopping-cart"></i> Quick Add
+                    </button>
+                </div>
+            </a>
+            <div class="product-card-body">
+                <div class="product-card-category">${product.category?.name || ''}</div>
+                <div class="product-card-name">${product.name}</div>
+                ${product.name_ta ? `<div style="font-size:var(--text-xs); color:var(--color-text-muted)">${product.name_ta}</div>` : ''}
+                ${product.source_info ? `<div class="product-card-source">🧑‍🌾 ${product.source_info}</div>` : ''}
+                <div class="product-card-footer">
+                    <div class="product-card-price">
+                        <span class="price ${hasDiscount ? 'price-sale' : ''}">
+                            ₹${displayPrice.toFixed(2)}
+                        </span>
+                        ${hasDiscount ? `<span class="price-original">₹${price.toFixed(2)}</span>` : ''}
+                    </div>
+                    <button
+                        class="btn btn-primary btn-sm"
+                        onclick="quickAdd(event, ${variant?.id || 'null'}, '${product.name}')"
+                        ${!variant || variant.stock_qty === 0 ? 'disabled' : ''}
+                    >
+                        ${!variant || variant.stock_qty === 0 ? 'Out of Stock' : '<i class="ph ph-plus"></i>'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ── Quick Add to Cart ──────────────────────────────────────
+async function quickAdd(event, variantId, productName) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!variantId) {
+        window.location.href = `/product/${productName}`;
+        return;
+    }
+
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph ph-circle-notch"></i>';
+
+    try {
+        await Cart.addItem(variantId, 1);
+        btn.innerHTML = '<i class="ph ph-check"></i>';
+        showToast(`${productName} added to cart! 🛒`);
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-plus"></i>';
+        }, 1500);
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ph ph-plus"></i>';
+        showToast(err.message || 'Failed to add to cart', 'error');
+    }
+}
+
+// ── Load Hero Banners ──────────────────────────────────────
+async function loadHeroBanners() {
+    try {
+        const res = await API.get('/api/banners/');
+        const banners = res.data?.banners?.filter(b => b.position === 'hero') || [];
+
+        if (banners.length === 0) return; // keep static fallback
+
+        const slidesContainer = document.getElementById('hero-slides');
+        const dotsContainer   = document.getElementById('hero-dots');
+        const fallback        = document.getElementById('hero-fallback');
+
+        fallback.style.display = 'none';
+
+        banners.forEach((banner, i) => {
+            // Slide
+            const slide = document.createElement('div');
+            slide.className = 'hero-slide';
+            slide.id = `slide-${i}`;
+            slide.style.display = i === 0 ? 'flex' : 'none';
+            slide.innerHTML = `
+                <img src="${banner.image_url}" alt="${banner.title || 'KYFF Banner'}" class="hero-bg">
+                <div class="container">
+                    <div class="hero-content">
+                        ${banner.title ? `<h1>${banner.title}</h1>` : ''}
+                        ${banner.link_url ? `<a href="${banner.link_url}" class="btn btn-accent btn-lg">Shop Now</a>` : ''}
+                    </div>
+                </div>
+            `;
+            slidesContainer.appendChild(slide);
+
+            // Dot
+            const dot = document.createElement('button');
+            dot.className = `hero-dot ${i === 0 ? 'active' : ''}`;
+            dot.onclick = () => goToSlide(i);
+            dotsContainer.appendChild(dot);
+        });
+
+        // Auto-slide
+        if (banners.length > 1) {
+            let current = 0;
+            setInterval(() => {
+                current = (current + 1) % banners.length;
+                goToSlide(current);
+            }, 4000);
+        }
+
+    } catch (e) {
+        // keep static fallback
+    }
+}
+
+function goToSlide(index) {
+    const slides = document.querySelectorAll('.hero-slide');
+    const dots   = document.querySelectorAll('.hero-dot');
+    slides.forEach((s, i) => s.style.display = i === index ? 'flex' : 'none');
+    dots.forEach((d, i) => d.classList.toggle('active', i === index));
+}
+
+// ── Load Categories ────────────────────────────────────────
+async function loadCategories() {
+    try {
+        const res  = await API.get('/api/categories/');
+        const cats = res.data?.categories || [];
+        const container = document.getElementById('category-chips');
+        container.innerHTML = '';
+
+        cats.forEach(cat => {
+            const chip = document.createElement('a');
+            chip.href = `/products?category=${cat.slug}`;
+            chip.className = 'category-chip';
+            chip.innerHTML = `
+                <div class="category-chip-icon">${getCategoryIcon(cat.slug)}</div>
+                <div class="category-chip-name">${cat.name}</div>
+            `;
+            container.appendChild(chip);
+        });
+    } catch (e) {
+        document.getElementById('category-chips').innerHTML =
+            '<p style="color:var(--color-text-muted); font-size:var(--text-sm)">Categories unavailable</p>';
+    }
+}
+
+// ── Load Featured Products ─────────────────────────────────
+async function loadFeaturedProducts() {
+    try {
+        const res      = await API.get('/api/products/featured');
+        const products = res.data?.products || [];
+        const container = document.getElementById('featured-products');
+        container.innerHTML = '';
+
+        if (products.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="grid-column:1/-1">
+                    <div class="empty-state-icon">🌱</div>
+                    <h3>Coming Soon</h3>
+                    <p>We're adding featured products soon!</p>
+                </div>
+            `;
+            return;
+        }
+
+        products.slice(0, 4).forEach(product => {
+            container.innerHTML += renderProductCard(product);
+        });
+
+    } catch (e) {
+        document.getElementById('featured-products').innerHTML =
+            '<p style="grid-column:1/-1; text-align:center; color:var(--color-text-muted)">Unable to load products</p>';
+    }
+}
+
+// ── Load Recommendations ───────────────────────────────────
+async function loadRecommendations() {
+    try {
+        const res  = await API.get('/api/products/recommendations');
+        const data = res.data;
+        const container = document.getElementById('recommendations-products');
+        const title     = document.getElementById('recommendations-title');
+        const subtitle  = document.getElementById('recommendations-subtitle');
+
+        if (Auth.isLoggedIn()) {
+            title.textContent    = 'Recommended for You';
+            subtitle.textContent = 'Based on your purchase history';
+        }
+
+        const products = data?.recommendations || [];
+        container.innerHTML = '';
+
+        products.slice(0, 4).forEach(item => {
+            container.innerHTML += renderProductCard(item.product || item);
+        });
+
+        if (products.length === 0) {
+            document.getElementById('recommendations-section').style.display = 'none';
+        }
+
+    } catch (e) {
+        document.getElementById('recommendations-section').style.display = 'none';
+    }
+}
+
+// ── Load New Products ──────────────────────────────────────
+async function loadNewProducts() {
+    try {
+        const res      = await API.get('/api/products/?per_page=8');
+        const products = res.data?.products || [];
+        const container = document.getElementById('new-products');
+        container.innerHTML = '';
+
+        products.forEach(product => {
+            container.innerHTML += renderProductCard(product);
+        });
+
+        if (products.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="grid-column:1/-1">
+                    <div class="empty-state-icon">🌱</div>
+                    <h3>Products Coming Soon</h3>
+                    <p>We're stocking up. Check back soon!</p>
+                </div>
+            `;
+        }
+    } catch (e) {
+        document.getElementById('new-products').innerHTML = '';
+    }
+}
+
+// ── Farmer Banner Responsive ───────────────────────────────
+const farmerGrid = document.querySelector('.farmer-banner-grid');
+if (farmerGrid) {
+    if (window.innerWidth >= 768) {
+        farmerGrid.style.gridTemplateColumns = '1fr 1fr';
+    }
+}
+
+// ── Init Homepage ──────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+    await Promise.all([
+        loadHeroBanners(),
+        loadCategories(),
+        loadFeaturedProducts(),
+        loadRecommendations(),
+        loadNewProducts(),
+    ]);
+});
+</script>
+
+<!-- Farmer banner responsive fix -->
+<style>
+@media (min-width: 768px) {
+    .farmer-banner-grid {
+        grid-template-columns: 1fr 1fr !important;
+    }
+}
+</style>
+{% endblock %}
