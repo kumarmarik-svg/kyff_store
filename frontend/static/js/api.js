@@ -15,6 +15,10 @@ const API = (() => {
         const token = localStorage.getItem('kyff_access_token');
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
+        // Guest cart session token — only sent when not logged in
+        const sessionToken = sessionStorage.getItem('kyff_session_token');
+        if (sessionToken && !token) headers['X-Session-Token'] = sessionToken;
+
         // Content type — skip for FormData
         if (!isFormData && body) {
             headers['Content-Type'] = 'application/json';
@@ -37,7 +41,10 @@ const API = (() => {
         }
 
         // Handle 401 — token expired
-        if (response.status === 401) {
+        // Skip refresh logic for login/register: a 401 there means wrong credentials,
+        // not an expired token. Let it fall through to the normal error handler below.
+        const skipRefresh = endpoint === '/api/auth/login' || endpoint === '/api/auth/register';
+        if (response.status === 401 && !skipRefresh) {
             const refreshed = await tryRefreshToken();
             if (refreshed) {
                 // Retry original request with new token

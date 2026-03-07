@@ -22,6 +22,10 @@ const Auth = (() => {
         localStorage.setItem(KEYS.refresh_token, refresh_token);
         localStorage.setItem(KEYS.user,          JSON.stringify(user));
 
+        // Merge any existing guest cart into the user's DB cart.
+        // Must run after tokens are saved so the API call is authenticated.
+        await Cart.mergeGuestCart();
+
         return user;
     }
 
@@ -37,6 +41,9 @@ const Auth = (() => {
         localStorage.setItem(KEYS.access_token,  access_token);
         localStorage.setItem(KEYS.refresh_token, refresh_token);
         localStorage.setItem(KEYS.user,          JSON.stringify(user));
+
+        // Merge any existing guest cart into the new user's DB cart.
+        await Cart.mergeGuestCart();
 
         return user;
     }
@@ -55,6 +62,9 @@ const Auth = (() => {
         localStorage.removeItem(KEYS.refresh_token);
         localStorage.removeItem(KEYS.user);
         localStorage.removeItem('kyff_cart_id');
+        // Clear guest cart session so the old guest cart never reappears after logout.
+        sessionStorage.removeItem('kyff_session_token');
+        localStorage.removeItem('kyff_guest_cart'); // remove legacy key
     }
 
 

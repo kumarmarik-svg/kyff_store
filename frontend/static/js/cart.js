@@ -1,19 +1,43 @@
 /* ============================================================
    CART.JS — KYFF Store
    Cart operations — add, update, remove, clear, merge
-   Works for both logged-in users and guests
+   Works for both logged-in users and guests.
+   Guest carts use the backend via X-Session-Token (set by api.js).
+   Session token is stored in localStorage as 'kyff_session_token'.
    ============================================================ */
 
 const Cart = (() => {
 
+    const SESSION_KEY = 'kyff_session_token';
+
+
+    // ── Save session token from backend response ────────────
+    // Backend returns session_token only when a new guest cart is created.
+    function _saveSessionToken(data) {
+        if (data?.session_token) {
+            sessionStorage.setItem(SESSION_KEY, data.session_token);
+        }
+    }
+
+
+    // ── Update badge from cart data ────────────────────────
+    function _badgeFromData(data) {
+        const count = (data?.items || []).reduce((sum, i) => sum + i.quantity, 0);
+        updateCartBadge(count);
+    }
+
+
     // ── Get Cart ───────────────────────────────────────────
     async function getCart() {
-        if (Auth.isLoggedIn()) {
-            return await API.get('/api/cart/');
+        // Don't hit the backend if there's nothing to load —
+        // avoids creating empty guest cart rows on every page load.
+        if (!Auth.isLoggedIn() && !sessionStorage.getItem(SESSION_KEY)) {
+            return { data: { items: [], total_items: 0, subtotal: 0 } };
         }
 
-        // Guest — return local cart
-        return { data: { items: getLocalCart() } };
+        const res = await API.get('/api/cart/');
+        _saveSessionToken(res.data);
+        return res;
     }
 
 
@@ -21,86 +45,58 @@ const Cart = (() => {
     async function addItem(variantId, quantity = 1) {
         if (!variantId) throw new Error('Invalid product');
 
-        if (Auth.isLoggedIn()) {
-            const result = await API.post('/api/cart/add', {
-                variant_id : variantId,
-                quantity,
-            });
-            refreshBadge();
-            return result;
-        }
-
-        // Guest — store locally
-        addToLocalCart(variantId, quantity);
-        refreshBadge();
-        return { data: { items: getLocalCart() } };
+        const result = await API.post('/api/cart/add', { variant_id: variantId, quantity });
+        _saveSessionToken(result.data);
+        _badgeFromData(result.data);
+        return result;
     }
 
 
     // ── Update Item ────────────────────────────────────────
     async function updateItem(cartItemId, quantity) {
-        if (Auth.isLoggedIn()) {
-            const result = await API.patch(`/api/cart/update/${cartItemId}`, { quantity });
-            refreshBadge();
-            return result;
-        }
-
-        updateLocalCart(cartItemId, quantity);
-        refreshBadge();
-        return { data: { items: getLocalCart() } };
+        const result = await API.patch(`/api/cart/update/${cartItemId}`, { quantity });
+        _badgeFromData(result.data);
+        return result;
     }
 
 
     // ── Remove Item ────────────────────────────────────────
     async function removeItem(cartItemId) {
-        if (Auth.isLoggedIn()) {
-            const result = await API.delete(`/api/cart/remove/${cartItemId}`);
-            refreshBadge();
-            return result;
-        }
-
-        removeFromLocalCart(cartItemId);
-        refreshBadge();
-        return { data: { items: getLocalCart() } };
+        const result = await API.delete(`/api/cart/remove/${cartItemId}`);
+        _badgeFromData(result.data);
+        return result;
     }
 
 
     // ── Clear Cart ─────────────────────────────────────────
     async function clearCart() {
-        if (Auth.isLoggedIn()) {
-            const result = await API.delete('/api/cart/clear');
-            refreshBadge();
-            return result;
-        }
-
-        localStorage.removeItem('kyff_guest_cart');
-        refreshBadge();
+        const result = await API.delete('/api/cart/clear');
+        _badgeFromData(result.data);
+        return result;
     }
 
 
-    // ── Clear Local Cart Count ─────────────────────────────
+    // ── Clear Local Cart (called after logout) ─────────────
     function clearLocalCart() {
-        localStorage.removeItem('kyff_guest_cart');
+        sessionStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem('kyff_guest_cart'); // remove legacy key
         updateCartBadge(0);
     }
 
 
     // ── Merge Guest Cart on Login ──────────────────────────
+    // Sends session_token (the backend cart identifier) to the merge endpoint.
+    // Backend merges guest items into the user's DB cart and deletes the guest cart.
     async function mergeGuestCart() {
-        const localCart = getLocalCart();
-        if (localCart.length === 0) return;
+        const sessionToken = sessionStorage.getItem(SESSION_KEY);
+        if (!sessionToken) return;
 
         try {
-            await API.post('/api/cart/merge', {
-                items: localCart.map(item => ({
-                    variant_id : item.variant_id,
-                    quantity   : item.quantity,
-                }))
-            });
-            localStorage.removeItem('kyff_guest_cart');
-            refreshBadge();
+            await API.post('/api/cart/merge', { session_token: sessionToken });
+            sessionStorage.removeItem(SESSION_KEY);
+            await refreshBadge();
         } catch (e) {
-            // Silent fail — guest cart merge is non-critical
+            // Silent fail — merge is non-critical
         }
     }
 
@@ -108,68 +104,22 @@ const Cart = (() => {
     // ── Refresh Cart Badge ─────────────────────────────────
     async function refreshBadge() {
         try {
-            if (Auth.isLoggedIn()) {
-                const res   = await API.get('/api/cart/');
-                const items = res.data?.items || [];
-                const count = items.reduce((sum, item) => sum + item.quantity, 0);
-                updateCartBadge(count);
-            } else {
-                const local = getLocalCart();
-                const count = local.reduce((sum, item) => sum + item.quantity, 0);
-                updateCartBadge(count);
+            if (!Auth.isLoggedIn() && !sessionStorage.getItem(SESSION_KEY)) {
+                updateCartBadge(0);
+                return;
             }
+            const res = await API.get('/api/cart/');
+            _saveSessionToken(res.data);
+            _badgeFromData(res.data);
         } catch {
             updateCartBadge(0);
         }
     }
 
 
-    // ── Local Cart Helpers (Guest) ─────────────────────────
+    // ── getLocalCart — kept for backward compat ────────────
     function getLocalCart() {
-        try {
-            const raw = localStorage.getItem('kyff_guest_cart');
-            return raw ? JSON.parse(raw) : [];
-        } catch {
-            return [];
-        }
-    }
-
-    function saveLocalCart(cart) {
-        localStorage.setItem('kyff_guest_cart', JSON.stringify(cart));
-    }
-
-    function addToLocalCart(variantId, quantity) {
-        const cart    = getLocalCart();
-        const existing = cart.find(i => i.variant_id === variantId);
-
-        if (existing) {
-            existing.quantity += quantity;
-        } else {
-            cart.push({
-                id         : Date.now(),  // temp local id
-                variant_id : variantId,
-                quantity,
-            });
-        }
-        saveLocalCart(cart);
-    }
-
-    function updateLocalCart(itemId, quantity) {
-        const cart    = getLocalCart();
-        const idx     = cart.findIndex(i => i.id === itemId);
-        if (idx !== -1) {
-            if (quantity <= 0) {
-                cart.splice(idx, 1);
-            } else {
-                cart[idx].quantity = quantity;
-            }
-        }
-        saveLocalCart(cart);
-    }
-
-    function removeFromLocalCart(itemId) {
-        const cart = getLocalCart().filter(i => i.id !== itemId);
-        saveLocalCart(cart);
+        return [];
     }
 
 

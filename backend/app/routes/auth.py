@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -10,6 +10,7 @@ import secrets
 
 from ..extensions import db, bcrypt
 from ..models import User, PasswordResetToken
+from ..utils.email import send_reset_email
 
 # ── Blueprint ─────────────────────────────────────────────────
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -55,7 +56,7 @@ def register():
     name     = data.get("name",     "").strip()
     email    = data.get("email",    "").strip().lower()
     password = data.get("password", "").strip()
-    phone    = data.get("phone",    "").strip() or None
+    phone    = (data.get("phone") or "").strip() or None
 
     if not name:
         return error("Name is required")
@@ -261,8 +262,10 @@ def forgot_password():
     db.session.commit()
 
     # ── Send email ────────────────────────────────────────────
-    # TODO: implement email sending in Step 8
-    # send_reset_email(user.email, token.token)
+    try:
+        send_reset_email(user.email, token.token)
+    except Exception as e:
+        current_app.logger.error(f"Failed to send reset email to {user.email}: {e}")
 
     return success("If this email exists, a reset link has been sent")
 

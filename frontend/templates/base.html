@@ -82,7 +82,7 @@
     <div class="navbar-menu hide-mobile">
         <div class="container navbar-menu-inner" id="category-nav">
             <!-- Populated by JS from API -->
-            <a href="/products" class="{{ 'active' if active_page == 'products' else '' }}">All Products</a>
+            <a href="/products" data-cat-slug="" class="{{ 'active' if active_page == 'products' else '' }}">All Products</a>
         </div>
     </div>
 </nav>
@@ -357,26 +357,75 @@ function showToast(message, type = 'success') {
 // ── Load Categories in Navbar ──────────────────────────────
 async function loadNavCategories() {
     try {
-        const res = await API.get('/api/categories/');
-        const nav = document.getElementById('category-nav');
-        const drawerCats = document.getElementById('drawer-categories');
+        const res  = await API.get('/api/categories/');
+        const nav  = document.getElementById('category-nav');
+        const drawerCats    = document.getElementById('drawer-categories');
+        const onProductsPage = window.location.pathname === '/products';
+        const activeSlug    = new URLSearchParams(window.location.search).get('category') || '';
+
+        // "All Products" is active only when NO category is selected.
+        // Use toggle (not add) so it correctly removes the class when a category IS active.
+        // This overrides the `main.js` active-nav-highlight that adds `active` based on
+        // pathname alone, which would otherwise make both tabs appear active simultaneously.
+        const allLink = nav.querySelector('a[data-cat-slug=""]');
+        if (allLink) {
+            allLink.classList.toggle('active', onProductsPage && !activeSlug);
+            if (onProductsPage) {
+                allLink.addEventListener('click', e => {
+                    e.preventDefault();
+                    _navSelectCategory('', nav);
+                });
+            }
+        }
 
         res.data.categories.forEach(cat => {
-            // Desktop nav
+            // ── Desktop nav link ──────────────────────────
             const a = document.createElement('a');
-            a.href = `/products?category=${cat.slug}`;
-            a.textContent = cat.name;
+            a.href            = `/products?category=${cat.slug}`;
+            a.textContent     = cat.name;
+            a.dataset.catSlug = cat.slug;
+            a.classList.toggle('active', onProductsPage && activeSlug === cat.slug);
+
+            if (onProductsPage) {
+                a.addEventListener('click', e => {
+                    e.preventDefault();
+                    _navSelectCategory(cat.slug, nav);
+                });
+            }
             nav.appendChild(a);
 
-            // Mobile drawer
+            // ── Mobile drawer link ────────────────────────
             const da = document.createElement('a');
-            da.href = `/products?category=${cat.slug}`;
+            da.href      = `/products?category=${cat.slug}`;
             da.innerHTML = `<i class="ph ph-leaf"></i> ${cat.name}`;
             drawerCats.appendChild(da);
         });
+
+        // Update page title/breadcrumb on refresh when a category was in the URL
+        if (onProductsPage && activeSlug) {
+            const activeLink = nav.querySelector(`a[data-cat-slug="${activeSlug}"]`);
+            if (activeLink) {
+                const label = activeLink.textContent.trim();
+                const titleEl = document.getElementById('page-title');
+                const bcEl    = document.getElementById('breadcrumb-current');
+                if (titleEl) titleEl.textContent = label;
+                if (bcEl)    bcEl.textContent    = label;
+            }
+        }
     } catch (e) {
         // Silent fail — categories optional in nav
     }
+}
+
+// Called by nav links when already on the products page
+function _navSelectCategory(slug, nav) {
+    // Highlight the clicked nav link
+    nav.querySelectorAll('a[data-cat-slug]').forEach(el =>
+        el.classList.toggle('active', el.dataset.catSlug === slug)
+    );
+    // Delegate to the products page's selectCategory() if available
+    if (typeof selectCategory === 'function') selectCategory(slug);
+    else window.location.href = slug ? `/products?category=${slug}` : '/products';
 }
 
 // ── Update Cart Count Badge ────────────────────────────────
@@ -399,8 +448,16 @@ function updateAccountBtn() {
 
     if (user) {
         if (btn) {
-            btn.href = '/orders';
+            btn.href  = '/orders';
             btn.title = user.name;
+            const firstName = user.name.split(' ')[0];
+            // Expand the fixed-size icon button to fit the name
+            btn.style.width      = 'auto';
+            btn.style.padding    = '0 10px';
+            btn.style.display    = 'inline-flex';
+            btn.style.alignItems = 'center';
+            btn.style.gap        = '5px';
+            btn.innerHTML = `<i class="ph ph-user" style="flex-shrink:0"></i><span style="font-size:0.8125rem; font-weight:500; white-space:nowrap; line-height:1">${firstName}</span>`;
         }
         if (drawerUser) {
             drawerUser.innerHTML = `

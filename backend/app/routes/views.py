@@ -3,7 +3,9 @@
 #  Flask URL routes that serve HTML pages
 # ============================================================
 
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, url_for, request
+
+from ..models import PasswordResetToken
 
 views_bp = Blueprint('views', __name__)
 
@@ -73,6 +75,21 @@ def register():
 def forgot_password():
     return render_template('auth/forgot-password.html',
         page_title = 'Forgot Password — KYFF')
+
+
+@views_bp.route('/auth/reset-password')
+def reset_password():
+    token_value = request.args.get('token', '').strip()
+
+    token_valid = False
+    if token_value:
+        record = PasswordResetToken.query.filter_by(token=token_value).first()
+        token_valid = record is not None and record.is_valid()
+
+    return render_template('auth/reset-password.html',
+        page_title  = 'Reset Password — KYFF',
+        token       = token_value,
+        token_valid = token_valid)
 
 
 # ── Admin Pages ────────────────────────────────────────────

@@ -402,7 +402,14 @@ def merge_cart():
         db.session.flush()
 
     # ── Merge items ───────────────────────────────────────────
-    for guest_item in guest_cart.items:
+    # Snapshot with .all() before any mutations.
+    # Do NOT reassign guest_item.cart_id — with cascade="all, delete-orphan"
+    # and lazy="dynamic", SQLAlchemy's cascade can delete reassigned items
+    # when the guest cart is later deleted. Instead, create new CartItem rows
+    # for the user cart and let the guest cart's items be cascade-deleted.
+    guest_items = guest_cart.items.all()
+
+    for guest_item in guest_items:
         existing = CartItem.query.filter_by(
             cart_id    = user_cart.id,
             variant_id = guest_item.variant_id
@@ -414,10 +421,14 @@ def merge_cart():
             combined = existing.quantity + guest_item.quantity
             existing.quantity = min(combined, variant.stock_qty)
         else:
-            # Move item to user cart
-            guest_item.cart_id = user_cart.id
+            # Create a new item in the user cart
+            db.session.add(CartItem(
+                cart_id    = user_cart.id,
+                variant_id = guest_item.variant_id,
+                quantity   = guest_item.quantity,
+            ))
 
-    # ── Delete guest cart ─────────────────────────────────────
+    # ── Delete guest cart (cascades to its original items) ────
     db.session.delete(guest_cart)
     db.session.commit()
 

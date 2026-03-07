@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
-from sqlalchemy import func
+from sqlalchemy import func, exists
 from datetime import datetime, timedelta
 from ..extensions import db
 from ..models import (
@@ -159,39 +159,99 @@ def _get_personal_recommendations(user_id, limit=5):
 @products_bp.route("/", methods=["GET"])
 def list_products():
     """
-    Returns paginated list of active products.
+    Returns paginated list of active products with full filtering.
 
     Query params:
         page        → page number (default 1)
         per_page    → items per page (default 12)
         category    → filter by category slug
-        sort        → newest / price_low / price_high / name
+        sort        → newest | price_asc | price_desc | name_asc
         featured    → true = only featured products
+        in_stock    → true = only products with stock > 0
+        sale        → true = only products with an active sale price
+        min_price   → minimum variant price (inclusive)
+        max_price   → maximum variant price (inclusive)
     """
-    page     = request.args.get("page",     1,       type=int)
-    per_page = request.args.get("per_page", 12,      type=int)
-    category = request.args.get("category", None)
-    sort     = request.args.get("sort",     "newest")
-    featured = request.args.get("featured", "false").lower() == "true"
+    page      = request.args.get("page",      1,       type=int)
+    per_page  = request.args.get("per_page",  12,      type=int)
+    category  = request.args.get("category",  None)
+    sort      = request.args.get("sort",      "newest")
+    featured  = request.args.get("featured",  "false").lower() == "true"
+    in_stock  = request.args.get("in_stock",  "false").lower() == "true"
+    on_sale   = request.args.get("sale",      "false").lower() == "true"
+    min_price = request.args.get("min_price", None, type=float)
+    max_price = request.args.get("max_price", None, type=float)
 
     query = Product.query.filter_by(is_active=True)
 
+    # ── Category ──────────────────────────────────────────────
     if category:
         cat = Category.query.filter_by(slug=category, is_active=True).first()
         if not cat:
-            return error("Category not found", 404)
-        query = query.filter_by(category_id=cat.id)
+            # Unknown slug → return empty result rather than 404
+            return success(
+                message = "Products fetched",
+                data    = {
+                    "products": [],
+                    "pagination": {
+                        "page": page, "per_page": per_page,
+                        "total": 0, "total_pages": 0,
+                        "has_next": False, "has_prev": False,
+                    }
+                }
+            )
+        query = query.filter(Product.category_id == cat.id)
 
+    # ── Featured ──────────────────────────────────────────────
     if featured:
-        query = query.filter_by(is_featured=True)
+        query = query.filter(Product.is_featured == True)
 
-    if sort == "price_low":
+    # ── Price range (filter by active variant price) ───────────
+    if min_price is not None:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.price      >= min_price)
+            )
+        )
+    if max_price is not None:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.price      <= max_price)
+            )
+        )
+
+    # ── In-stock ──────────────────────────────────────────────
+    if in_stock:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.stock_qty  >  0)
+            )
+        )
+
+    # ── On sale ───────────────────────────────────────────────
+    if on_sale:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.sale_price != None)
+            )
+        )
+
+    # ── Sort ──────────────────────────────────────────────────
+    if sort == "price_asc":
         query = query.order_by(Product.base_price.asc())
-    elif sort == "price_high":
+    elif sort == "price_desc":
         query = query.order_by(Product.base_price.desc())
-    elif sort == "name":
+    elif sort == "name_asc":
         query = query.order_by(Product.name.asc())
-    else:
+    else:  # newest (default)
         query = query.order_by(Product.created_at.desc())
 
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -199,7 +259,10 @@ def list_products():
     return success(
         message = "Products fetched",
         data    = {
-           "products": [p.to_dict(include_variants=True, include_images=True) for p in paginated.items],
+            "products": [
+                p.to_dict(include_variants=True, include_images=True)
+                for p in paginated.items
+            ],
             "pagination": {
                 "page":        paginated.page,
                 "per_page":    paginated.per_page,
@@ -217,41 +280,107 @@ def list_products():
 def search_products():
     """
     Searches products by name, Tamil name, description, source.
+    Accepts the same filter/sort params as list_products.
 
     Query params:
-        q        → search term, min 2 chars (required)
-        page     → page number (default 1)
-        per_page → items per page (default 12)
+        q         → search term, min 2 chars (required)
+        page      → page number (default 1)
+        per_page  → items per page (default 12)
+        sort      → newest | price_asc | price_desc | name_asc
+        in_stock  → true = only in-stock products
+        sale      → true = only on-sale products
+        min_price → minimum variant price
+        max_price → maximum variant price
+        featured  → true = only featured
     """
-    q        = request.args.get("q",        "").strip()
-    page     = request.args.get("page",     1,  type=int)
-    per_page = request.args.get("per_page", 12, type=int)
+    q         = request.args.get("q",        "").strip()
+    page      = request.args.get("page",     1,  type=int)
+    per_page  = request.args.get("per_page", 12, type=int)
+    sort      = request.args.get("sort",     "newest")
+    featured  = request.args.get("featured", "false").lower() == "true"
+    in_stock  = request.args.get("in_stock", "false").lower() == "true"
+    on_sale   = request.args.get("sale",     "false").lower() == "true"
+    min_price = request.args.get("min_price", None, type=float)
+    max_price = request.args.get("max_price", None, type=float)
 
     if not q:
         return error("Search term is required")
     if len(q) < 2:
         return error("Search term must be at least 2 characters")
 
-    search_filter = db.or_(
-        Product.name.ilike(f"%{q}%"),
-        Product.name_ta.ilike(f"%{q}%"),
-        Product.description.ilike(f"%{q}%"),
-        Product.source_info.ilike(f"%{q}%")
-    )
-
-    paginated = (
+    query = (
         Product.query
         .filter_by(is_active=True)
-        .filter(search_filter)
-        .order_by(Product.name.asc())
-        .paginate(page=page, per_page=per_page, error_out=False)
+        .filter(db.or_(
+            Product.name.ilike(f"%{q}%"),
+            Product.name_ta.ilike(f"%{q}%"),
+            Product.description.ilike(f"%{q}%"),
+            Product.source_info.ilike(f"%{q}%")
+        ))
     )
+
+    # ── Featured ──────────────────────────────────────────────
+    if featured:
+        query = query.filter(Product.is_featured == True)
+
+    # ── Price range ───────────────────────────────────────────
+    if min_price is not None:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.price      >= min_price)
+            )
+        )
+    if max_price is not None:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.price      <= max_price)
+            )
+        )
+
+    # ── In-stock ──────────────────────────────────────────────
+    if in_stock:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.stock_qty  >  0)
+            )
+        )
+
+    # ── On sale ───────────────────────────────────────────────
+    if on_sale:
+        query = query.filter(
+            exists().where(
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active  == True) &
+                (ProductVariant.sale_price != None)
+            )
+        )
+
+    # ── Sort ──────────────────────────────────────────────────
+    if sort == "price_asc":
+        query = query.order_by(Product.base_price.asc())
+    elif sort == "price_desc":
+        query = query.order_by(Product.base_price.desc())
+    elif sort == "name_asc":
+        query = query.order_by(Product.name.asc())
+    else:
+        query = query.order_by(Product.name.asc())  # default for search: alphabetical
+
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
     return success(
         message = f"{paginated.total} results found for '{q}'",
         data    = {
             "query":    q,
-            "products": [p.to_dict(include_variants=True, include_images=True) for p in paginated.items],
+            "products": [
+                p.to_dict(include_variants=True, include_images=True)
+                for p in paginated.items
+            ],
             "pagination": {
                 "page":        paginated.page,
                 "per_page":    paginated.per_page,

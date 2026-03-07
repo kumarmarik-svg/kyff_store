@@ -32,7 +32,8 @@
                 onclick="toggleMobileFilters()"
                 id="filter-toggle-btn"
             >
-                <i class="ph ph-funnel"></i> Filters
+                <i class="ph ph-funnel" id="filter-icon"></i>
+                <span id="filter-toggle-text"> Filters</span>
                 <span id="active-filter-count" style="display:none" class="badge badge-primary">0</span>
             </button>
 
@@ -50,18 +51,6 @@
                     </button>
                 </h3>
 
-                <!-- Category Filter -->
-                <div class="filter-group">
-                    <h4>Category</h4>
-                    <div id="category-filters">
-                        <div class="skeleton skeleton-text"></div>
-                        <div class="skeleton skeleton-text"></div>
-                        <div class="skeleton skeleton-text"></div>
-                    </div>
-                </div>
-
-                <hr class="divider">
-
                 <!-- Price Range -->
                 <div class="filter-group">
                     <h4>Price Range</h4>
@@ -71,7 +60,7 @@
                             id="price-min"
                             placeholder="Min"
                             min="0"
-                            onchange="applyFilters()"
+                            oninput="debouncedApplyFilters()"
                         >
                         <span style="color:var(--color-text-muted)">–</span>
                         <input
@@ -79,7 +68,7 @@
                             id="price-max"
                             placeholder="Max"
                             min="0"
-                            onchange="applyFilters()"
+                            oninput="debouncedApplyFilters()"
                         >
                     </div>
                 </div>
@@ -103,14 +92,13 @@
                     </label>
                 </div>
 
-                <hr class="divider">
-
-                <!-- Apply button (mobile) -->
+                <!-- Close button (mobile) — filters apply live, no Apply needed -->
                 <button
-                    class="btn btn-primary btn-full show-mobile"
+                    class="btn btn-outline btn-full show-mobile"
+                    style="margin-top:var(--space-4)"
                     onclick="toggleMobileFilters()"
                 >
-                    Apply Filters
+                    <i class="ph ph-x"></i> Close Filters
                 </button>
 
             </div>
@@ -121,20 +109,6 @@
              PRODUCTS MAIN
              ══════════════════════════════════════════════════ -->
         <div>
-
-            <!-- Search Bar -->
-            <div style="margin-bottom:var(--space-5); position:relative">
-                <i class="ph ph-magnifying-glass"
-                   style="position:absolute; left:var(--space-4); top:50%; transform:translateY(-50%); color:var(--color-text-muted)"></i>
-                <input
-                    type="search"
-                    class="form-input"
-                    id="products-search"
-                    placeholder="Search products, Tamil names, farmer names..."
-                    style="padding-left:var(--space-10)"
-                    oninput="debounceSearch(this.value)"
-                >
-            </div>
 
             <!-- Toolbar -->
             <div class="products-toolbar">
@@ -198,90 +172,47 @@
 
 // ── State ──────────────────────────────────────────────────
 const state = {
-    page       : 1,
-    per_page   : 12,
-    q          : '',
-    category   : '',
-    sort       : 'newest',
-    min_price  : '',
-    max_price  : '',
-    in_stock   : false,
-    on_sale    : false,
-    featured   : false,
+    page      : 1,
+    per_page  : 12,
+    q         : '',
+    category  : '',
+    sort      : 'newest',
+    min_price : '',
+    max_price : '',
+    in_stock  : false,
+    on_sale   : false,
+    featured  : false,
 };
-
-let searchTimer = null;
 
 
 // ── Init from URL params ───────────────────────────────────
 function initFromURL() {
     const params = new URLSearchParams(window.location.search);
 
-    if (params.get('q'))        { state.q        = params.get('q');        document.getElementById('products-search').value = state.q; }
-    if (params.get('category')) { state.category = params.get('category'); }
-    if (params.get('page'))     { state.page     = parseInt(params.get('page')); }
-    if (params.get('sort'))     { state.sort     = params.get('sort');     document.getElementById('sort-select').value = state.sort; }
-    if (params.get('featured')) { state.featured = true;                   document.getElementById('filter-featured').checked = true; }
-    if (params.get('sale'))     { state.on_sale  = true;                   document.getElementById('filter-on-sale').checked  = true; }
+    if (params.get('q'))         { state.q         = params.get('q'); }
+    if (params.get('category'))  { state.category  = params.get('category'); }
+    if (params.get('page'))      { state.page       = parseInt(params.get('page')); }
+    if (params.get('sort'))      { state.sort       = params.get('sort'); document.getElementById('sort-select').value = state.sort; }
+    if (params.get('featured'))  { state.featured   = true; document.getElementById('filter-featured').checked = true; }
+    if (params.get('sale'))      { state.on_sale    = true; document.getElementById('filter-on-sale').checked  = true; }
+    if (params.get('in_stock'))  { state.in_stock   = true; document.getElementById('filter-in-stock').checked = true; }
+    if (params.get('min_price')) { state.min_price  = params.get('min_price'); document.getElementById('price-min').value = state.min_price; }
+    if (params.get('max_price')) { state.max_price  = params.get('max_price'); document.getElementById('price-max').value = state.max_price; }
 
-    // Update page title
+    // Prevent flash: immediately remove "All Products" active class when a category
+    // is in the URL. loadNavCategories() (async) will complete the full sync later.
+    if (state.category) {
+        const allLink = document.querySelector('#category-nav a[data-cat-slug=""]');
+        if (allLink) allLink.classList.remove('active');
+    }
+
     if (state.q) {
-        document.getElementById('page-title').textContent    = `Search: "${state.q}"`;
-        document.getElementById('breadcrumb-current').textContent = `Search Results`;
+        document.getElementById('page-title').textContent         = `Search: "${state.q}"`;
+        document.getElementById('breadcrumb-current').textContent = 'Search Results';
     }
-}
 
-
-// ── Load Categories into Sidebar ───────────────────────────
-async function loadSidebarCategories() {
-    try {
-        const res  = await API.get('/api/categories/tree');
-        const cats = res.data?.categories || [];
-        const container = document.getElementById('category-filters');
-        container.innerHTML = '';
-
-        // All Products option
-        const allOpt = document.createElement('label');
-        allOpt.className = 'filter-option';
-        allOpt.innerHTML = `
-            <input type="radio" name="category" value="" onchange="selectCategory('')"
-                ${!state.category ? 'checked' : ''}>
-            All Products
-        `;
-        container.appendChild(allOpt);
-
-        cats.forEach(cat => {
-            const opt = document.createElement('label');
-            opt.className = 'filter-option';
-            opt.innerHTML = `
-                <input type="radio" name="category" value="${cat.slug}"
-                    onchange="selectCategory('${cat.slug}')"
-                    ${state.category === cat.slug ? 'checked' : ''}>
-                ${cat.name}
-                ${cat.name_ta ? `<span style="font-size:var(--text-xs); color:var(--color-text-muted)">(${cat.name_ta})</span>` : ''}
-            `;
-            container.appendChild(opt);
-
-            // Sub-categories
-            if (cat.children?.length > 0) {
-                cat.children.forEach(child => {
-                    const childOpt = document.createElement('label');
-                    childOpt.className = 'filter-option';
-                    childOpt.style.paddingLeft = 'var(--space-6)';
-                    childOpt.innerHTML = `
-                        <input type="radio" name="category" value="${child.slug}"
-                            onchange="selectCategory('${child.slug}')"
-                            ${state.category === child.slug ? 'checked' : ''}>
-                        ${child.name}
-                    `;
-                    container.appendChild(childOpt);
-                });
-            }
-        });
-    } catch (e) {
-        document.getElementById('category-filters').innerHTML =
-            '<p style="font-size:var(--text-sm); color:var(--color-text-muted)">Categories unavailable</p>';
-    }
+    // Show active filter tags immediately so UI isn't blank while products load
+    updateActiveFilterTags();
 }
 
 
@@ -306,20 +237,16 @@ async function loadProducts() {
     pagination.style.display = 'none';
 
     // Build query
-    const params = new URLSearchParams({
-        page     : state.page,
-        per_page : state.per_page,
-    });
-    if (state.q)         params.set('q',        state.q);
-    if (state.category)  params.set('category', state.category);
-    if (state.sort)      params.set('sort',      state.sort);
-    if (state.min_price) params.set('min_price', state.min_price);
-    if (state.max_price) params.set('max_price', state.max_price);
-    if (state.in_stock)  params.set('in_stock',  'true');
-    if (state.on_sale)   params.set('sale',       'true');
-    if (state.featured)  params.set('featured',   'true');
+    const params = new URLSearchParams({ page: state.page, per_page: state.per_page });
+    if (state.q)         params.set('q',         state.q);
+    if (state.category)  params.set('category',  state.category);
+    if (state.sort)      params.set('sort',       state.sort);
+    if (state.min_price) params.set('min_price',  state.min_price);
+    if (state.max_price) params.set('max_price',  state.max_price);
+    if (state.in_stock)  params.set('in_stock',   'true');
+    if (state.on_sale)   params.set('sale',        'true');
+    if (state.featured)  params.set('featured',    'true');
 
-    // Fetch
     const endpoint = state.q
         ? `/api/products/search?${params}`
         : `/api/products/?${params}`;
@@ -329,11 +256,9 @@ async function loadProducts() {
         const products = res.data?.products || [];
         const pag      = res.data?.pagination || {};
 
-        // Update counts
         document.getElementById('products-showing').textContent = products.length;
         document.getElementById('products-total').textContent   = pag.total || products.length;
 
-        // Render
         grid.innerHTML = '';
 
         if (products.length === 0) {
@@ -341,17 +266,13 @@ async function loadProducts() {
             return;
         }
 
-        products.forEach(product => {
-            grid.innerHTML += renderProductCard(product);
-        });
+        products.forEach(product => { grid.innerHTML += renderProductCard(product); });
 
-        // Pagination
         if (pag.total_pages > 1) {
             renderPagination(pag);
             pagination.style.display = 'flex';
         }
 
-        // Update URL
         updateURL();
 
     } catch (e) {
@@ -443,11 +364,11 @@ async function quickAdd(event, variantId, productName, slug) {
         btn.innerHTML = '<i class="ph ph-check"></i>';
         showToast(`${productName} added to cart! 🛒`);
         setTimeout(() => {
-            btn.disabled = false;
+            btn.disabled  = false;
             btn.innerHTML = '<i class="ph ph-plus"></i>';
         }, 1500);
     } catch (err) {
-        btn.disabled = false;
+        btn.disabled  = false;
         btn.innerHTML = '<i class="ph ph-plus"></i>';
         showToast(err.message || 'Failed to add to cart', 'error');
     }
@@ -459,7 +380,6 @@ function renderPagination(pag) {
     const container = document.getElementById('pagination');
     container.innerHTML = '';
 
-    // Prev
     const prev = document.createElement('button');
     prev.className = 'pagination-btn';
     prev.innerHTML = '<i class="ph ph-caret-left"></i>';
@@ -467,31 +387,22 @@ function renderPagination(pag) {
     prev.onclick   = () => { state.page--; loadProducts(); scrollToTop(); };
     container.appendChild(prev);
 
-    // Pages
     for (let i = 1; i <= pag.total_pages; i++) {
-        if (
-            i === 1 ||
-            i === pag.total_pages ||
-            (i >= pag.page - 1 && i <= pag.page + 1)
-        ) {
+        if (i === 1 || i === pag.total_pages || (i >= pag.page - 1 && i <= pag.page + 1)) {
             const btn = document.createElement('button');
-            btn.className = `pagination-btn ${i === pag.page ? 'active' : ''}`;
+            btn.className   = `pagination-btn ${i === pag.page ? 'active' : ''}`;
             btn.textContent = i;
-            btn.onclick = () => { state.page = i; loadProducts(); scrollToTop(); };
+            btn.onclick     = () => { state.page = i; loadProducts(); scrollToTop(); };
             container.appendChild(btn);
-        } else if (
-            i === pag.page - 2 ||
-            i === pag.page + 2
-        ) {
+        } else if (i === pag.page - 2 || i === pag.page + 2) {
             const dots = document.createElement('span');
-            dots.textContent = '...';
+            dots.textContent   = '...';
             dots.style.padding = '0 var(--space-2)';
             dots.style.color   = 'var(--color-text-muted)';
             container.appendChild(dots);
         }
     }
 
-    // Next
     const next = document.createElement('button');
     next.className = 'pagination-btn';
     next.innerHTML = '<i class="ph ph-caret-right"></i>';
@@ -501,21 +412,35 @@ function renderPagination(pag) {
 }
 
 
-// ── Filters ────────────────────────────────────────────────
+// ── Category Selection (called by header nav or filter tag clear) ──
 function selectCategory(slug) {
     state.category = slug;
     state.page     = 1;
 
-    // Update page title
-    const label = slug
-        ? document.querySelector(`input[value="${slug}"]`)?.parentElement?.textContent?.trim()
-        : 'All Products';
-    document.getElementById('page-title').textContent        = label || 'All Products';
-    document.getElementById('breadcrumb-current').textContent = label || 'Products';
+    // Sync header nav active state
+    document.querySelectorAll('#category-nav a[data-cat-slug]').forEach(a => {
+        a.classList.toggle('active', a.dataset.catSlug === slug);
+    });
+
+    // Update page title from the now-active nav link
+    const activeLink = document.querySelector(`#category-nav a[data-cat-slug="${slug}"]`);
+    const label      = activeLink?.textContent?.trim() || 'All Products';
+    document.getElementById('page-title').textContent         = label;
+    document.getElementById('breadcrumb-current').textContent = slug ? label : 'Products';
 
     applyFilters();
 }
 
+
+// ── Debounced Apply (for price inputs — avoids API call on every keystroke) ──
+let _priceTimer = null;
+function debouncedApplyFilters() {
+    clearTimeout(_priceTimer);
+    _priceTimer = setTimeout(applyFilters, 400);
+}
+
+
+// ── Apply Filters ──────────────────────────────────────────
 function applyFilters() {
     state.page      = 1;
     state.sort      = document.getElementById('sort-select').value;
@@ -529,25 +454,30 @@ function applyFilters() {
     loadProducts();
 }
 
+
+// ── Clear All Filters ──────────────────────────────────────
 function clearAllFilters() {
-    state.q        = '';
-    state.category = '';
-    state.page     = 1;
-    state.sort     = 'newest';
+    state.q         = '';
+    state.category  = '';
+    state.page      = 1;
+    state.sort      = 'newest';
     state.min_price = '';
     state.max_price = '';
     state.in_stock  = false;
     state.on_sale   = false;
     state.featured  = false;
 
-    document.getElementById('products-search').value      = '';
-    document.getElementById('sort-select').value          = 'newest';
-    document.getElementById('price-min').value            = '';
-    document.getElementById('price-max').value            = '';
-    document.getElementById('filter-in-stock').checked   = false;
-    document.getElementById('filter-on-sale').checked    = false;
-    document.getElementById('filter-featured').checked   = false;
-    document.querySelectorAll('input[name="category"]')[0].checked = true;
+    document.getElementById('sort-select').value        = 'newest';
+    document.getElementById('price-min').value          = '';
+    document.getElementById('price-max').value          = '';
+    document.getElementById('filter-in-stock').checked  = false;
+    document.getElementById('filter-on-sale').checked   = false;
+    document.getElementById('filter-featured').checked  = false;
+
+    // Reset header nav — activate "All Products"
+    document.querySelectorAll('#category-nav a[data-cat-slug]').forEach(a => {
+        a.classList.toggle('active', a.dataset.catSlug === '');
+    });
 
     document.getElementById('page-title').textContent         = 'All Products';
     document.getElementById('breadcrumb-current').textContent = 'Products';
@@ -556,33 +486,38 @@ function clearAllFilters() {
     loadProducts();
 }
 
+
+// ── Active Filter Tags ─────────────────────────────────────
 function updateActiveFilterTags() {
     const container = document.getElementById('active-filters');
     const tags      = [];
 
-    if (state.q)         tags.push({ label: `Search: "${state.q}"`, clear: () => { state.q = ''; document.getElementById('products-search').value = ''; applyFilters(); } });
-    if (state.category)  tags.push({ label: `Category: ${state.category}`, clear: () => selectCategory('') });
-    if (state.on_sale)   tags.push({ label: 'On Sale', clear: () => { state.on_sale = false; document.getElementById('filter-on-sale').checked = false; applyFilters(); } });
-    if (state.featured)  tags.push({ label: 'Featured', clear: () => { state.featured = false; document.getElementById('filter-featured').checked = false; applyFilters(); } });
-    if (state.in_stock)  tags.push({ label: 'In Stock', clear: () => { state.in_stock = false; document.getElementById('filter-in-stock').checked = false; applyFilters(); } });
-    if (state.min_price || state.max_price) tags.push({ label: `₹${state.min_price || 0} – ₹${state.max_price || '∞'}`, clear: () => { state.min_price = ''; state.max_price = ''; document.getElementById('price-min').value = ''; document.getElementById('price-max').value = ''; applyFilters(); } });
+    if (state.q)        tags.push({ label: `Search: "${state.q}"`,       clear: () => { state.q = ''; applyFilters(); } });
+    if (state.category) tags.push({ label: `Category: ${state.category}`, clear: () => selectCategory('') });
+    if (state.on_sale)  tags.push({ label: 'On Sale',  clear: () => { state.on_sale  = false; document.getElementById('filter-on-sale').checked  = false; applyFilters(); } });
+    if (state.featured) tags.push({ label: 'Featured', clear: () => { state.featured = false; document.getElementById('filter-featured').checked = false; applyFilters(); } });
+    if (state.in_stock) tags.push({ label: 'In Stock', clear: () => { state.in_stock = false; document.getElementById('filter-in-stock').checked = false; applyFilters(); } });
+    if (state.min_price || state.max_price) tags.push({
+        label : `₹${state.min_price || 0} – ₹${state.max_price || '∞'}`,
+        clear : () => { state.min_price = ''; state.max_price = ''; document.getElementById('price-min').value = ''; document.getElementById('price-max').value = ''; applyFilters(); }
+    });
 
     container.innerHTML = tags.map((t, i) => `
-        <span class="badge badge-primary" style="cursor:pointer; padding:var(--space-2) var(--space-3)" onclick="activeFilterClear(${i})">
+        <span class="badge badge-primary"
+              style="cursor:pointer; padding:var(--space-2) var(--space-3)"
+              onclick="activeFilterClear(${i})">
             ${t.label} ✕
         </span>
     `).join('');
 
-    // Store clear functions
     window._filterClears = tags.map(t => t.clear);
 
-    // Active filter count badge
     const countBadge = document.getElementById('active-filter-count');
     if (tags.length > 0) {
-        countBadge.textContent    = tags.length;
-        countBadge.style.display  = 'inline-flex';
+        countBadge.textContent   = tags.length;
+        countBadge.style.display = 'inline-flex';
     } else {
-        countBadge.style.display  = 'none';
+        countBadge.style.display = 'none';
     }
 }
 
@@ -591,55 +526,37 @@ function activeFilterClear(index) {
 }
 
 
-// ── Debounced Search ───────────────────────────────────────
-function debounceSearch(value) {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-        state.q    = value.trim();
-        state.page = 1;
-        updateActiveFilterTags();
-        loadProducts();
-    }, 400);
-}
-
-
 // ── Mobile Filters ─────────────────────────────────────────
 function toggleMobileFilters() {
     const sidebar = document.getElementById('filters-sidebar');
-    const btn     = document.getElementById('filter-toggle-btn');
     const isOpen  = sidebar.style.display !== 'none';
     sidebar.style.display = isOpen ? 'none' : 'block';
-    btn.innerHTML = isOpen
-        ? '<i class="ph ph-funnel"></i> Filters'
-        : '<i class="ph ph-x"></i> Close Filters';
+    document.getElementById('filter-icon').className         = isOpen ? 'ph ph-funnel' : 'ph ph-x';
+    document.getElementById('filter-toggle-text').textContent = isOpen ? ' Filters' : ' Close Filters';
 }
 
 
 // ── URL Sync ───────────────────────────────────────────────
 function updateURL() {
     const params = new URLSearchParams();
-    if (state.q)        params.set('q',        state.q);
-    if (state.category) params.set('category', state.category);
-    if (state.page > 1) params.set('page',     state.page);
-    if (state.sort !== 'newest') params.set('sort', state.sort);
-    if (state.featured) params.set('featured', 'true');
-    if (state.on_sale)  params.set('sale',      'true');
-    window.history.replaceState({}, '', `${window.location.pathname}?${params}`);
-}
-
-function scrollToTop() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (state.q)                 params.set('q',         state.q);
+    if (state.category)          params.set('category',  state.category);
+    if (state.page > 1)          params.set('page',      state.page);
+    if (state.sort !== 'newest') params.set('sort',      state.sort);
+    if (state.featured)          params.set('featured',  'true');
+    if (state.on_sale)           params.set('sale',       'true');
+    if (state.in_stock)          params.set('in_stock',   'true');
+    if (state.min_price)         params.set('min_price',  state.min_price);
+    if (state.max_price)         params.set('max_price',  state.max_price);
+    const qs = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? '?' + qs : ''}`);
 }
 
 
 // ── Show Filters on Desktop ────────────────────────────────
 function handleResponsiveFilters() {
     const sidebar = document.getElementById('filters-sidebar');
-    if (window.innerWidth >= 1024) {
-        sidebar.style.display = 'block';
-    } else {
-        sidebar.style.display = 'none';
-    }
+    sidebar.style.display = window.innerWidth >= 1024 ? 'block' : 'none';
 }
 
 window.addEventListener('resize', handleResponsiveFilters);
@@ -649,7 +566,6 @@ window.addEventListener('resize', handleResponsiveFilters);
 document.addEventListener('DOMContentLoaded', () => {
     handleResponsiveFilters();
     initFromURL();
-    loadSidebarCategories();
     loadProducts();
 });
 </script>
