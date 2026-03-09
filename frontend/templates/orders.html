@@ -116,7 +116,6 @@ function filterOrders(status) {
     activeFilter = status;
     currentPage  = 1;
 
-    // Update tabs
     document.querySelectorAll('[id^="tab-"]').forEach(t => t.classList.remove('active'));
     document.getElementById(`tab-${status}`).classList.add('active');
 
@@ -147,28 +146,53 @@ function renderOrders() {
     }
 
     // Paginate
-    const start    = (currentPage - 1) * PER_PAGE;
-    const end      = start + PER_PAGE;
-    const paged    = filtered.slice(start, end);
+    const start       = (currentPage - 1) * PER_PAGE;
+    const paged       = filtered.slice(start, start + PER_PAGE);
     const total_pages = Math.ceil(filtered.length / PER_PAGE);
 
     container.innerHTML = paged.map(order => renderOrderCard(order)).join('');
 
-    // Pagination
     if (total_pages > 1) {
         renderPagination(total_pages);
         document.getElementById('orders-pagination').style.display = 'flex';
     } else {
         document.getElementById('orders-pagination').style.display = 'none';
     }
+
+    // Kick off live countdown timers for any pending-payment cards
+    startCountdownTimers();
 }
 
 
 // ── Render Order Card ──────────────────────────────────────
 function renderOrderCard(order) {
-    const items    = order.items || [];
-    const thumbs   = items.slice(0, 3);
-    const extra    = items.length - 3;
+    const items  = order.items || [];
+    const thumbs = items.slice(0, 3);
+    const extra  = items.length - 3;
+    const isPending  = order.status === 'pending';
+    const isExpired  = order.is_payment_expired;
+
+    // Pending expiry countdown text
+    let expiryBanner = '';
+    if (isPending && !isExpired && order.payment_expires_at) {
+        const expiresAt  = new Date(order.payment_expires_at + 'Z'); // treat as UTC
+        const remaining  = expiresAt - Date.now();
+        if (remaining > 0) {
+            const mins = Math.floor(remaining / 60000);
+            const secs = Math.floor((remaining % 60000) / 1000);
+            expiryBanner = `
+                <div style="background:var(--color-warning-light,#fff3cd);
+                            border:1px solid var(--color-warning,#ffc107);
+                            border-radius:var(--radius-sm); padding:var(--space-2) var(--space-3);
+                            font-size:var(--text-xs); color:#856404;
+                            display:flex; align-items:center; gap:var(--space-2);
+                            margin-bottom:var(--space-3)">
+                    ⏳ Complete payment within <strong id="timer-${order.order_number}"
+                    >${mins}m ${secs}s</strong> to confirm your order.
+                </div>
+            `;
+        }
+    }
 
     return `
         <div class="order-card">
@@ -186,6 +210,9 @@ function renderOrderCard(order) {
                 </span>
             </div>
 
+            <!-- Expiry Banner -->
+            ${expiryBanner}
+
             <!-- Body -->
             <div class="order-card-body">
 
@@ -193,8 +220,7 @@ function renderOrderCard(order) {
                 <div class="order-items-preview">
                     ${thumbs.map(item => `
                         <div class="order-item-thumb">
-                            <img src="${item.variant?.product?.images?.[0]?.image_url
-                                || '/static/images/placeholder.png'}"
+                            <img src="${item.image_url || '/static/images/placeholder.png'}"
                                  alt="${item.product_name}"
                                  onerror="this.src='/static/images/placeholder.png'">
                         </div>
@@ -226,13 +252,23 @@ function renderOrderCard(order) {
 
                 <div style="display:flex; gap:var(--space-2); flex-wrap:wrap">
 
-                    <!-- Track Button -->
-                    <a href="/orders/${order.order_number}"
-                       class="btn btn-primary btn-sm">
-                        <i class="ph ph-map-pin"></i> Track Order
-                    </a>
+                    <!-- Pay Now — only for pending, non-expired orders -->
+                    ${isPending && !isExpired ? `
+                        <button class="btn btn-accent btn-sm"
+                                onclick="retryPayment('${order.order_number}')">
+                            <i class="ph ph-credit-card"></i> Pay Now
+                        </button>
+                    ` : ''}
 
-                    <!-- Cancel Button — only for pending/confirmed -->
+                    <!-- Track Order — only after payment confirmed -->
+                    ${!isPending ? `
+                        <a href="/orders/${order.order_number}"
+                           class="btn btn-primary btn-sm">
+                            <i class="ph ph-map-pin"></i> Track Order
+                        </a>
+                    ` : ''}
+
+                    <!-- Cancel — pending or confirmed only -->
                     ${['pending','confirmed'].includes(order.status) ? `
                         <button class="btn btn-outline btn-sm"
                                 style="color:var(--color-error); border-color:var(--color-error)"
@@ -241,7 +277,7 @@ function renderOrderCard(order) {
                         </button>
                     ` : ''}
 
-                    <!-- Reorder Button — for delivered -->
+                    <!-- Reorder — delivered orders -->
                     ${order.status === 'delivered' ? `
                         <button class="btn btn-outline btn-sm"
                                 onclick="reorder(${JSON.stringify(order.items).replace(/"/g,'&quot;')})">
@@ -254,6 +290,96 @@ function renderOrderCard(order) {
 
         </div>
     `;
+}
+
+
+// ── Countdown Timers ───────────────────────────────────────
+// Called at the end of every renderOrders() pass. Each timer only
+// updates its own text node — it does NOT call renderOrders() or
+// mutate allOrders, so there is no render loop. When the window
+// runs out, a fresh loadOrders() hits the server for authoritative
+// data (status will be 'cancelled' by then).
+function startCountdownTimers() {
+    allOrders.forEach(order => {
+        if (order.status !== 'pending' || order.is_payment_expired) return;
+        if (!order.payment_expires_at) return;
+
+        const el        = document.getElementById(`timer-${order.order_number}`);
+        if (!el) return;
+
+        const expiresAt = new Date(order.payment_expires_at + 'Z'); // treat as UTC
+
+        const tick = () => {
+            if (!el.isConnected) return; // element removed by a later render — stop
+
+            const remaining = expiresAt - Date.now();
+            if (remaining <= 0) {
+                // Reload from server so card shows the cancelled status
+                loadOrders();
+                return;
+            }
+
+            const mins = Math.floor(remaining / 60000);
+            const secs = Math.floor((remaining % 60000) / 1000);
+            el.textContent = `${mins}m ${secs}s`;
+            setTimeout(tick, 1000);
+        };
+
+        setTimeout(tick, 1000);
+    });
+}
+
+
+// ── Retry Payment ──────────────────────────────────────────
+async function retryPayment(orderNumber) {
+    try {
+        const payRes = await API.post(`/api/payments/retry/${orderNumber}`, {});
+        const { razorpay_order_id, amount, currency, key_id, payment_id } = payRes.data;
+
+        const user = Auth.getUser();
+
+        const options = {
+            key         : key_id,
+            amount,
+            currency,
+            name        : 'KYFF',
+            description : `Order ${orderNumber}`,
+            order_id    : razorpay_order_id,
+            prefill     : {
+                name    : user?.name  || '',
+                email   : user?.email || '',
+                contact : user?.phone || '',
+            },
+            theme : { color: '#2D6A4F' },
+
+            handler: async (response) => {
+                try {
+                    await API.post('/api/payments/verify', {
+                        razorpay_order_id   : response.razorpay_order_id,
+                        razorpay_payment_id : response.razorpay_payment_id,
+                        razorpay_signature  : response.razorpay_signature,
+                        payment_id,
+                    });
+                    showToast('Payment successful! Order confirmed. ✅');
+                    loadOrders();
+                } catch (e) {
+                    showToast('Payment verification failed. Contact support.', 'error');
+                }
+            },
+
+            modal: {
+                ondismiss: () => {
+                    showToast('Payment cancelled. You can retry anytime.', 'warning');
+                }
+            }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+
+    } catch (err) {
+        showToast(err.message || 'Could not initiate payment. Please try again.', 'error');
+    }
 }
 
 
@@ -280,7 +406,7 @@ async function reorder(items) {
                 try {
                     await Cart.addItem(item.variant_id, item.quantity);
                     added++;
-                } catch (e) {} // skip out-of-stock
+                } catch (e) {}
             }
         }
         if (added > 0) {
@@ -353,4 +479,8 @@ function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 </script>
+
+<!-- Razorpay SDK — needed for retry payment -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
 {% endblock %}

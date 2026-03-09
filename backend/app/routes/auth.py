@@ -9,7 +9,7 @@ from datetime import timedelta, datetime
 import secrets
 
 from ..extensions import db, bcrypt
-from ..models import User, PasswordResetToken
+from ..models import User, PasswordResetToken, Address
 from ..utils.email import send_reset_email
 
 # ── Blueprint ─────────────────────────────────────────────────
@@ -217,6 +217,64 @@ def me():
     return success(
         message = "Profile fetched",
         data    = {"user": user.to_dict()}
+    )
+
+
+# ── POST /api/auth/me/addresses ───────────────────────────────
+@auth_bp.route("/me/addresses", methods=["POST"])
+@jwt_required()
+def add_address():
+    """
+    Saves a new delivery address for the logged-in user.
+    Called from checkout when "Save this address" is checked.
+
+    Request body (JSON):
+        full_name : string, required
+        phone     : string, required
+        line1     : string, required
+        line2     : string, optional
+        city      : string, required
+        state     : string, required
+        pincode   : string, required
+        country   : string, optional (default: India)
+
+    Returns:
+        201 → address saved
+        400 → validation error
+    """
+    user_id = int(get_jwt_identity())
+    data    = request.get_json()
+
+    if not data:
+        return error("Request body is required")
+
+    required_fields = ["full_name", "phone", "line1", "city", "state", "pincode"]
+    for field in required_fields:
+        if not (data.get(field) or "").strip():
+            return error(f"Address field '{field}' is required")
+
+    # First address for the user becomes the default automatically
+    is_first = Address.query.filter_by(user_id=user_id).count() == 0
+
+    address = Address(
+        user_id    = user_id,
+        full_name  = data["full_name"].strip(),
+        phone      = data["phone"].strip(),
+        line1      = data["line1"].strip(),
+        line2      = (data.get("line2") or "").strip() or None,
+        city       = data["city"].strip(),
+        state      = data["state"].strip(),
+        pincode    = data["pincode"].strip(),
+        country    = (data.get("country") or "India").strip(),
+        is_default = is_first,
+    )
+    db.session.add(address)
+    db.session.commit()
+
+    return success(
+        message = "Address saved",
+        data    = {"address": address.to_dict()},
+        code    = 201
     )
 
 

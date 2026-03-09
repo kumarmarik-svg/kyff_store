@@ -62,9 +62,9 @@ const Auth = (() => {
         localStorage.removeItem(KEYS.refresh_token);
         localStorage.removeItem(KEYS.user);
         localStorage.removeItem('kyff_cart_id');
-        // Clear guest cart session so the old guest cart never reappears after logout.
-        sessionStorage.removeItem('kyff_session_token');
-        localStorage.removeItem('kyff_guest_cart'); // remove legacy key
+        // Clear guest cart state — resets badge and removes the session token
+        // so it cannot be merged back into the user's cart on next login.
+        Cart.clearLocalCart();
     }
 
 

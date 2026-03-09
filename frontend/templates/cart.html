@@ -2,7 +2,7 @@
 
 {% block content %}
 
-<div class="page-header">
+<div class="page-header cart-page-header">
     <div class="container">
         <h1>Shopping Cart</h1>
         <div class="breadcrumb">
@@ -37,7 +37,7 @@
         <div class="cart-layout">
 
             <!-- ── LEFT — Cart Items ── -->
-            <div>
+            <div class="cart-items-col">
                 <!-- Header -->
                 <div style="display:flex; align-items:center; justify-content:space-between;
                             margin-bottom:var(--space-5)">
@@ -67,86 +67,92 @@
             </div>
 
             <!-- ── RIGHT — Order Summary ── -->
-            <div>
+            <div class="cart-summary-col">
                 <div class="order-summary">
-                    <h3>Order Summary</h3>
 
-                    <!-- Free Shipping Progress -->
-                    <div class="free-shipping-bar" id="shipping-progress-bar">
-                        <div id="shipping-progress-text">
-                            Add ₹<span id="shipping-remaining">500</span> more for free shipping! 🚚
-                        </div>
-                        <div class="free-shipping-progress">
-                            <div class="free-shipping-fill" id="shipping-fill" style="width:0%"></div>
-                        </div>
+                    <!-- Header — never scrolls -->
+                    <div class="summary-header">
+                        <h3>Order Summary</h3>
                     </div>
 
-                    <!-- Summary Rows -->
-                    <div class="summary-row">
-                        <span>Subtotal (<span id="summary-count">0</span> items)</span>
-                        <span>₹<span id="summary-subtotal">0.00</span></span>
-                    </div>
-                    <div class="summary-row" id="summary-shipping-row">
-                        <span>Shipping</span>
-                        <span id="summary-shipping">₹60.00</span>
-                    </div>
-                    <div class="summary-row" id="summary-discount-row" style="display:none">
-                        <span>Discount</span>
-                        <span style="color:var(--color-success)">
-                            −₹<span id="summary-discount">0.00</span>
-                        </span>
-                    </div>
-                    <div class="summary-row total">
-                        <span>Total</span>
-                        <span>₹<span id="summary-total">0.00</span></span>
-                    </div>
+                    <!-- Price rows — scrollable on desktop when card hits max-height -->
+                    <div class="summary-body">
 
-                    <!-- Checkout Button -->
-                    <button
-                        class="btn btn-accent btn-full btn-lg"
-                        style="margin-top:var(--space-5)"
-                        onclick="proceedToCheckout()"
-                        id="checkout-btn"
-                    >
-                        <i class="ph ph-lock"></i> Proceed to Checkout
-                    </button>
+                        <!-- Free Shipping Progress -->
+                        <div class="free-shipping-bar" id="shipping-progress-bar">
+                            <div id="shipping-progress-text">
+                                Add ₹<span id="shipping-remaining">500</span> more for free shipping! 🚚
+                            </div>
+                            <div class="free-shipping-progress">
+                                <div class="free-shipping-fill" id="shipping-fill" style="width:0%"></div>
+                            </div>
+                        </div>
 
-                    <!-- Trust Badges -->
-                    <div style="display:flex; flex-direction:column; gap:var(--space-2);
-                                margin-top:var(--space-5); padding-top:var(--space-5);
-                                border-top:1px solid var(--color-border)">
-                        <div style="display:flex; align-items:center; gap:var(--space-2);
-                                    font-size:var(--text-xs); color:var(--color-text-muted)">
-                            <i class="ph ph-lock-simple" style="color:var(--color-success)"></i>
-                            Secure checkout — SSL encrypted
+                        <!-- Summary Rows -->
+                        <div class="summary-row">
+                            <span>Subtotal (<span id="summary-count">0</span> items)</span>
+                            <span>₹<span id="summary-subtotal">0.00</span></span>
                         </div>
-                        <div style="display:flex; align-items:center; gap:var(--space-2);
-                                    font-size:var(--text-xs); color:var(--color-text-muted)">
-                            <i class="ph ph-arrow-counter-clockwise" style="color:var(--color-success)"></i>
-                            Easy returns within 7 days
+                        <div class="summary-row" id="summary-shipping-row">
+                            <span>Shipping</span>
+                            <span id="summary-shipping">₹60.00</span>
                         </div>
-                        <div style="display:flex; align-items:center; gap:var(--space-2);
-                                    font-size:var(--text-xs); color:var(--color-text-muted)">
-                            <i class="ph ph-truck" style="color:var(--color-success)"></i>
-                            Free shipping on orders above ₹500
+                        <div class="summary-row" id="summary-discount-row" style="display:none">
+                            <span>Discount</span>
+                            <span style="color:var(--color-success)">
+                                −₹<span id="summary-discount">0.00</span>
+                            </span>
                         </div>
-                    </div>
-                </div>
+                        <div class="summary-row total">
+                            <span>Total</span>
+                            <span>₹<span id="summary-total">0.00</span></span>
+                        </div>
 
-                <!-- You May Also Like -->
-                <div style="margin-top:var(--space-6)" id="upsell-section">
-                    <h3 style="font-family:var(--font-body); font-size:var(--text-base);
-                               font-weight:var(--weight-semibold); margin-bottom:var(--space-4)">
-                        You May Also Like
-                    </h3>
-                    <div id="upsell-products"
-                         style="display:flex; flex-direction:column; gap:var(--space-3)">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
+                    </div><!-- /.summary-body -->
+
+                    <!-- Checkout section — always visible at bottom -->
+                    <div class="checkout-section">
+                        <button
+                            class="btn btn-accent btn-full btn-lg"
+                            onclick="proceedToCheckout()"
+                            id="checkout-btn"
+                        >
+                            <i class="ph ph-lock"></i> Proceed to Checkout
+                        </button>
+
+                        <!-- Security messages -->
+                        <div class="trust-badges">
+                            <div class="trust-badge">
+                                <i class="ph ph-lock-simple"></i>
+                                Secure checkout — SSL encrypted
+                            </div>
+                            <div class="trust-badge">
+                                <i class="ph ph-arrow-counter-clockwise"></i>
+                                Easy returns within 7 days
+                            </div>
+                            <div class="trust-badge">
+                                <i class="ph ph-truck"></i>
+                                Free shipping on orders above ₹500
+                            </div>
+                        </div>
+                    </div><!-- /.checkout-section -->
+
+                </div><!-- /.order-summary -->
             </div>
 
         </div>
+
+        <!-- ── You May Also Like — full width below both columns ── -->
+        <div style="margin-top:var(--space-8)" id="upsell-section">
+            <h3 style="font-family:var(--font-body); font-size:var(--text-base);
+                       font-weight:var(--weight-semibold); margin-bottom:var(--space-4)">
+                You May Also Like
+            </h3>
+            <div id="upsell-products" class="upsell-grid">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -163,27 +169,37 @@ const FREE_SHIPPING_THRESHOLD = 500;
 const SHIPPING_CHARGE         = 60;
 
 
-// ── Load Cart ──────────────────────────────────────────────
+// ── Apply Cart State ────────────────────────────────────────
+// Single source of truth for showing/hiding cart sections.
+// Always call this instead of toggling sections manually.
+function applyCartState(items) {
+    if (items.length === 0) {
+        document.getElementById('cart-empty').style.display   = 'flex';
+        document.getElementById('cart-content').style.display = 'none';
+    } else {
+        document.getElementById('cart-empty').style.display   = 'none';
+        document.getElementById('cart-content').style.display = 'block';
+        renderCartItems(items);
+        updateSummary(items);
+    }
+}
+
+
+// ── Load Cart (initial page load only) ─────────────────────
 async function loadCart() {
     try {
         const res   = await Cart.getCart();
         const items = res.data?.items || [];
 
         document.getElementById('cart-loading').style.display = 'none';
+        applyCartState(items);
 
-        if (items.length === 0) {
-            document.getElementById('cart-empty').style.display   = 'flex';
-            document.getElementById('cart-content').style.display = 'none';
-            return;
-        }
-
-        document.getElementById('cart-content').style.display = 'flex';
-        renderCartItems(items);
-        updateSummary(items);
-        loadUpsellProducts();
+        if (items.length > 0) loadUpsellProducts();
 
     } catch (e) {
+        // Initial load failed — show empty state rather than a broken UI.
         document.getElementById('cart-loading').style.display = 'none';
+        document.getElementById('cart-content').style.display = 'none';
         document.getElementById('cart-empty').style.display   = 'flex';
     }
 }
@@ -191,8 +207,9 @@ async function loadCart() {
 
 // ── Render Cart Items ──────────────────────────────────────
 function renderCartItems(items) {
-    const container = document.getElementById('cart-items-list');
-    document.getElementById('cart-item-count').textContent = items.length;
+    const container  = document.getElementById('cart-items-list');
+    const countEl    = document.getElementById('cart-item-count');
+    if (countEl) countEl.textContent = items.length;
 
     container.innerHTML = items.map(item => {
         const price     = parseFloat(item.unit_price || 0);
@@ -267,31 +284,38 @@ function updateSummary(items) {
     const total    = subtotal + shipping;
     const count    = items.reduce((sum, item) => sum + item.quantity, 0);
 
-    // Update DOM
-    document.getElementById('summary-subtotal').textContent = subtotal.toFixed(2);
-    document.getElementById('summary-count').textContent    = count;
-    document.getElementById('summary-total').textContent    = total.toFixed(2);
-
-    // Shipping row
+    // Update DOM — optional chaining guards against elements missing during
+    // the transition between full-cart and empty-cart layouts.
+    const subtotalEl = document.getElementById('summary-subtotal');
+    const countEl    = document.getElementById('summary-count');
+    const totalEl    = document.getElementById('summary-total');
     const shippingEl = document.getElementById('summary-shipping');
-    if (shipping === 0) {
-        shippingEl.innerHTML = '<span style="color:var(--color-success)">FREE 🎉</span>';
-    } else {
-        shippingEl.textContent = `₹${shipping.toFixed(2)}`;
+    const fillEl     = document.getElementById('shipping-fill');
+    const progressEl = document.getElementById('shipping-progress-text');
+    const remainEl   = document.getElementById('shipping-remaining');
+
+    if (subtotalEl) subtotalEl.textContent = subtotal.toFixed(2);
+    if (countEl)    countEl.textContent    = count;
+    if (totalEl)    totalEl.textContent    = total.toFixed(2);
+
+    if (shippingEl) {
+        if (shipping === 0) {
+            shippingEl.innerHTML = '<span style="color:var(--color-success)">FREE 🎉</span>';
+        } else {
+            shippingEl.textContent = `₹${shipping.toFixed(2)}`;
+        }
     }
 
     // Free shipping progress bar
     const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
     const pct       = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100);
 
-    document.getElementById('shipping-fill').style.width = `${pct}%`;
+    if (fillEl) fillEl.style.width = `${pct}%`;
 
     if (remaining === 0) {
-        document.getElementById('shipping-progress-text').innerHTML =
-            '🎉 You get <strong>FREE shipping!</strong>';
+        if (progressEl) progressEl.innerHTML = '🎉 You get <strong>FREE shipping!</strong>';
     } else {
-        document.getElementById('shipping-remaining').textContent =
-            remaining.toFixed(2);
+        if (remainEl) remainEl.textContent = remaining.toFixed(2);
     }
 }
 
@@ -303,11 +327,19 @@ async function updateQty(itemId, newQty) {
         return;
     }
 
+    // Disable all qty buttons on this item to prevent concurrent mutations.
+    const itemEl = document.getElementById(`cart-item-${itemId}`);
+    const btns   = itemEl?.querySelectorAll('.qty-btn');
+    btns?.forEach(b => b.disabled = true);
+
     try {
-        await Cart.updateItem(itemId, newQty);
-        await loadCart();
+        // Use the response directly — no second GET needed.
+        const res   = await Cart.updateItem(itemId, newQty);
+        const items = res.data?.items || [];
+        applyCartState(items);
     } catch (err) {
         showToast(err.message || 'Could not update quantity', 'error');
+        btns?.forEach(b => b.disabled = false);
     }
 }
 
@@ -316,7 +348,14 @@ async function updateQty(itemId, newQty) {
 async function removeItem(itemId) {
     const itemEl = document.getElementById(`cart-item-${itemId}`);
 
-    // Animate out
+    // Prevent double-click / concurrent removes on the same item.
+    const removeBtn = itemEl?.querySelector('.cart-item-remove');
+    if (removeBtn) {
+        if (removeBtn.disabled) return;
+        removeBtn.disabled = true;
+    }
+
+    // Animate out.
     if (itemEl) {
         itemEl.style.transition = 'all 0.3s ease';
         itemEl.style.opacity    = '0';
@@ -325,15 +364,20 @@ async function removeItem(itemId) {
     }
 
     try {
-        await Cart.removeItem(itemId);
-        await loadCart();
+        // Cart.removeItem() returns the updated cart — use it directly
+        // instead of making a second GET call that can race with other removes.
+        const res   = await Cart.removeItem(itemId);
+        const items = res.data?.items || [];
+        applyCartState(items);
         showToast('Item removed from cart');
     } catch (err) {
         showToast(err.message || 'Could not remove item', 'error');
+        // Restore the item in the DOM so the user can try again.
         if (itemEl) {
             itemEl.style.opacity   = '1';
             itemEl.style.transform = 'translateX(0)';
         }
+        if (removeBtn) removeBtn.disabled = false;
     }
 }
 
@@ -344,7 +388,7 @@ async function clearCart() {
 
     try {
         await Cart.clearCart();
-        await loadCart();
+        applyCartState([]);
         showToast('Cart cleared');
     } catch (err) {
         showToast('Could not clear cart', 'error');
@@ -383,7 +427,8 @@ async function loadUpsellProducts() {
             container.innerHTML += `
                 <div style="display:flex; gap:var(--space-3); align-items:center;
                             padding:var(--space-3); border:1px solid var(--color-border);
-                            border-radius:var(--radius-md); background:var(--color-bg-card)">
+                            border-radius:var(--radius-md); background:var(--color-bg-card);
+                            min-width:0">
                     <a href="/product/${p.slug}">
                         <img src="${image}" alt="${p.name}"
                              style="width:56px; height:56px; object-fit:cover;

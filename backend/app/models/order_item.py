@@ -93,15 +93,31 @@ class OrderItem(db.Model):
         )
 
     def to_dict(self):
+        # Resolve primary product image via variant → product relationship
+        image_url = None
+        product_id = None
+        product_slug = None
+        if self.variant and self.variant.product:
+            product = self.variant.product
+            product_id   = product.id
+            product_slug = getattr(product, "slug", None)
+            primary_img  = product.images.filter_by(is_primary=True).first() \
+                or product.images.first()
+            if primary_img:
+                image_url = primary_img.image_url
+
         return {
             "id":            self.id,
             "order_id":      self.order_id,
             "variant_id":    self.variant_id,
+            "product_id":    product_id,
+            "product_slug":  product_slug,
             "product_name":  self.product_name,
             "variant_label": self.variant_label,
             "unit_price":    float(self.unit_price),
             "quantity":      self.quantity,
             "line_total":    float(self.line_total),
+            "image_url":     image_url,
         }
 
     def __repr__(self):

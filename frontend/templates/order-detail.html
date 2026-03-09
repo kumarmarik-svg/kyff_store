@@ -258,8 +258,10 @@ function renderOrderDetail(order) {
 
     // Payment method
     const payment = order.payments?.[0];
-    document.getElementById('sum-payment').textContent =
-        payment ? `${capitalize(payment.gateway)} — ${capitalize(payment.status)}` : 'Pending';
+    const paymentLabel = payment
+        ? `${capitalize(payment.gateway)} — ${payment.status === 'success' ? 'Paid' : capitalize(payment.status)}`
+        : 'Pending';
+    document.getElementById('sum-payment').textContent = paymentLabel;
 
     // Delivery address
     document.getElementById('delivery-address').innerHTML = `
@@ -279,6 +281,127 @@ function renderOrderDetail(order) {
     // Cancel button
     if (['pending','confirmed'].includes(order.status)) {
         document.getElementById('cancel-btn').style.display = 'inline-flex';
+    }
+
+    // Pending payment: show Pay Now button + expiry info
+    renderPaymentActions(order);
+}
+
+
+// ── Payment Actions for Pending Orders ─────────────────────
+function renderPaymentActions(order) {
+    // Remove any previous payment action block
+    const existing = document.getElementById('payment-action-block');
+    if (existing) existing.remove();
+
+    if (order.status !== 'pending') return;
+
+    const footer = document.querySelector('#reorder-btn').closest('.card-footer');
+    const block  = document.createElement('div');
+    block.id     = 'payment-action-block';
+
+    if (order.is_payment_expired) {
+        block.innerHTML = `
+            <div style="background:#fff3cd; border:1px solid #ffc107;
+                        border-radius:var(--radius-sm); padding:var(--space-3);
+                        font-size:var(--text-sm); color:#856404; margin-bottom:var(--space-4)">
+                ⚠️ Payment window expired. This order has been cancelled.
+            </div>
+        `;
+    } else {
+        const expiresAt = order.payment_expires_at
+            ? new Date(order.payment_expires_at + 'Z') : null;
+        const remaining = expiresAt ? expiresAt - Date.now() : 0;
+        const mins = remaining > 0 ? Math.floor(remaining / 60000) : 0;
+        const secs = remaining > 0 ? Math.floor((remaining % 60000) / 1000) : 0;
+
+        block.innerHTML = `
+            <div style="background:#fff3cd; border:1px solid #ffc107;
+                        border-radius:var(--radius-sm); padding:var(--space-3);
+                        font-size:var(--text-sm); color:#856404; margin-bottom:var(--space-4)">
+                ⏳ Complete payment within
+                <strong id="detail-timer">${mins}m ${secs}s</strong>
+                to confirm your order.
+            </div>
+            <button class="btn btn-accent btn-sm" onclick="retryPaymentDetail()">
+                <i class="ph ph-credit-card"></i> Pay Now
+            </button>
+        `;
+
+        // Start countdown
+        if (remaining > 0) {
+            const tick = () => {
+                const left = expiresAt - Date.now();
+                const el   = document.getElementById('detail-timer');
+                if (!el) return;
+                if (left <= 0) {
+                    el.closest('div').innerHTML =
+                        '⚠️ Payment window expired. Please cancel and place a new order.';
+                    return;
+                }
+                el.textContent = `${Math.floor(left/60000)}m ${Math.floor((left%60000)/1000)}s`;
+                setTimeout(tick, 1000);
+            };
+            setTimeout(tick, 1000);
+        }
+    }
+
+    // Insert before the card footer
+    footer.parentNode.insertBefore(block, footer);
+}
+
+
+// ── Retry Payment from Detail Page ─────────────────────────
+async function retryPaymentDetail() {
+    if (!orderData) return;
+
+    try {
+        const payRes = await API.post(`/api/payments/retry/${orderData.order_number}`, {});
+        const { razorpay_order_id, amount, currency, key_id, payment_id } = payRes.data;
+
+        const user = Auth.getUser();
+
+        const options = {
+            key         : key_id,
+            amount,
+            currency,
+            name        : 'KYFF',
+            description : `Order ${orderData.order_number}`,
+            order_id    : razorpay_order_id,
+            prefill     : {
+                name    : user?.name  || '',
+                email   : user?.email || '',
+                contact : user?.phone || '',
+            },
+            theme : { color: '#2D6A4F' },
+
+            handler: async (response) => {
+                try {
+                    await API.post('/api/payments/verify', {
+                        razorpay_order_id   : response.razorpay_order_id,
+                        razorpay_payment_id : response.razorpay_payment_id,
+                        razorpay_signature  : response.razorpay_signature,
+                        payment_id,
+                    });
+                    showToast('Payment successful! Order confirmed. ✅');
+                    loadOrderDetail();
+                } catch (e) {
+                    showToast('Payment verification failed. Contact support.', 'error');
+                }
+            },
+
+            modal: {
+                ondismiss: () => {
+                    showToast('Payment cancelled. You can retry anytime.', 'warning');
+                }
+            }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+
+    } catch (err) {
+        showToast(err.message || 'Could not initiate payment. Please try again.', 'error');
     }
 }
 
@@ -343,14 +466,13 @@ function renderItems(items) {
 
     const container = document.getElementById('detail-items');
     container.innerHTML = items.map((item, i) => {
-        const image = item.variant?.product?.images?.[0]?.image_url
-            || '/static/images/placeholder.png';
+        const image  = item.image_url || '/static/images/placeholder.png';
         const isLast = i === items.length - 1;
 
         return `
             <div style="display:flex; gap:var(--space-4); padding:var(--space-5);
                         ${!isLast ? 'border-bottom:1px solid var(--color-border)' : ''}">
-                <a href="/product/${item.variant?.product?.slug || '#'}">
+                <a href="/product/${item.product_slug || '#'}">
                     <img src="${image}" alt="${item.product_name}"
                          style="width:72px; height:72px; object-fit:cover;
                                 border-radius:var(--radius-md); flex-shrink:0"
@@ -440,4 +562,8 @@ function statusIcon(status) {
     return icons[status] || '📋';
 }
 </script>
+
+<!-- Razorpay SDK — needed for retry payment -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
 {% endblock %}

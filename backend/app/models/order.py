@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..extensions import db
 
 
@@ -57,6 +57,14 @@ class Order(db.Model):
         default="pending"
     )
 
+    # ── Payment Expiry ────────────────────────────────────────
+    # Unpaid orders are auto-cancelled after this timestamp.
+    payment_expires_at = db.Column(
+        db.DateTime,
+        nullable=True,
+        comment="Unpaid order auto-cancels after this time (15 min window)"
+    )
+
     # ── Notes ─────────────────────────────────────────────────
     notes = db.Column(
         db.Text,
@@ -102,6 +110,29 @@ class Order(db.Model):
         date_str = date.today().strftime("%Y%m%d")
         random_part = secrets.token_hex(3).upper()
         return f"KYFF-{date_str}-{random_part}"
+
+    def is_payment_expired(self):
+        """
+        Returns True if the payment window has closed and the order
+        was never paid.  Only relevant while status == 'pending'.
+        """
+        if self.status != "pending":
+            return False
+        if not self.payment_expires_at:
+            return False
+        return datetime.utcnow() > self.payment_expires_at
+
+    def expire_if_needed(self):
+        """
+        Auto-cancels the order when the payment window has elapsed.
+        Call this before returning any pending order to the frontend.
+        Does NOT commit — caller must call db.session.commit().
+        Returns True if the order was just cancelled.
+        """
+        if self.is_payment_expired() and not self.is_paid():
+            self.status = "cancelled"
+            return True
+        return False
 
     def is_cancellable(self):
         """
@@ -159,7 +190,14 @@ class Order(db.Model):
             "pincode": self.shipping_pincode,
         }
 
-    def to_dict(self, include_items=False):
+    def to_dict(self, include_items=False, include_payment=True):
+        """
+        Serialise the order to a dict.
+
+        include_items   – also embed OrderItem list (False in list views)
+        include_payment – also embed the latest payment row (skip in list
+                          views to avoid one extra query per order)
+        """
         data = {
             "id":               self.id,
             "order_number":     self.order_number,
@@ -169,12 +207,32 @@ class Order(db.Model):
             "shipping_charge":  float(self.shipping_charge),
             "discount_amount":  float(self.discount_amount),
             "total":            float(self.total),
+            # Flat shipping fields (used directly by frontend)
+            "shipping_name":    self.shipping_name,
+            "shipping_phone":   self.shipping_phone,
+            "shipping_line1":   self.shipping_line1,
+            "shipping_line2":   self.shipping_line2,
+            "shipping_city":    self.shipping_city,
+            "shipping_state":   self.shipping_state,
+            "shipping_pincode": self.shipping_pincode,
+            # Nested address dict (kept for backwards compat)
             "shipping_address": self.shipping_address(),
             "notes":            self.notes,
             "is_paid":          self.is_paid(),
             "is_cancellable":   self.is_cancellable(),
+            "payment_expires_at": self.payment_expires_at.isoformat()
+                                  if self.payment_expires_at else None,
+            "is_payment_expired": self.is_payment_expired(),
             "created_at":       self.created_at.isoformat(),
+            # Payment row(s) — omitted from list views to avoid N+1
+            "payments": [],
         }
+        if include_payment:
+            from .payment import Payment as _Payment
+            latest = _Payment.query.filter_by(order_id=self.id)\
+                .order_by(_Payment.created_at.desc()).first()
+            data["payments"] = [latest.to_dict()] if latest else []
+
         if include_items:
             data["items"] = [i.to_dict() for i in self.items]
         return data

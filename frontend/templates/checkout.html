@@ -189,14 +189,19 @@
                  RIGHT — Order Summary
                  ══════════════════════════════════════════════ -->
             <div>
-                <div class="order-summary">
-                    <h3>Order Summary</h3>
+                <div class="order-summary" style="padding:var(--space-6)">
+                    <h3 style="font-family:var(--font-body); font-size:var(--text-lg);
+                               font-weight:var(--weight-semibold);
+                               padding-bottom:var(--space-4);
+                               border-bottom:1px solid var(--color-border);
+                               margin-bottom:var(--space-4)">
+                        Order Summary
+                    </h3>
 
                     <!-- Items Preview -->
                     <div id="checkout-items-preview"
-                         style="margin-bottom:var(--space-5); max-height:240px;
-                                overflow-y:auto; display:flex; flex-direction:column;
-                                gap:var(--space-3)">
+                         class="checkout-order-items"
+                         style="display:flex; flex-direction:column; gap:var(--space-4)">
                         <!-- Populated by JS -->
                     </div>
 
@@ -219,7 +224,7 @@
                     <!-- Place Order Button -->
                     <button
                         class="btn btn-accent btn-full btn-xl"
-                        style="margin-top:var(--space-6)"
+                        style="margin-top:var(--space-5)"
                         onclick="placeOrder()"
                         id="place-order-btn"
                     >
@@ -322,32 +327,34 @@ async function loadCartData() {
 
 
 // ── Render Checkout Items Preview ──────────────────────────
+// Cart API returns flat fields: product_name, image_url, unit_price,
+// line_total, variant_label — NOT nested variant/product objects.
 function renderCheckoutItems() {
     const container = document.getElementById('checkout-items-preview');
     container.innerHTML = cartItems.map(item => {
-        const v     = item.variant;
-        const p     = v?.product;
-        const price = parseFloat(v?.sale_price || v?.price || 0);
-        const image = p?.images?.[0]?.image_url || '/static/images/placeholder.png';
+        const name      = item.product_name  || 'Product';
+        const image     = item.image_url     || '/static/images/placeholder.png';
+        const label     = item.variant_label || '';
+        const lineTotal = parseFloat(item.line_total || 0);
 
         return `
             <div style="display:flex; align-items:center; gap:var(--space-3)">
-                <img src="${image}" alt="${p?.name || ''}"
+                <img src="${image}" alt="${name}"
                      style="width:48px; height:48px; border-radius:var(--radius-sm);
-                            object-fit:cover; flex-shrink:0"
+                            object-fit:cover; flex-shrink:0; background:var(--color-bg-light)"
                      onerror="this.src='/static/images/placeholder.png'">
                 <div style="flex:1; min-width:0">
                     <div style="font-size:var(--text-sm); font-weight:var(--weight-medium);
                                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
-                        ${p?.name || 'Product'}
+                        ${name}
                     </div>
                     <div style="font-size:var(--text-xs); color:var(--color-text-muted)">
-                        ${v?.label || ''} × ${item.quantity}
+                        ${label ? label + ' · ' : ''}×${item.quantity}
                     </div>
                 </div>
                 <div style="font-weight:var(--weight-semibold); font-size:var(--text-sm);
-                            flex-shrink:0">
-                    ₹${(price * item.quantity).toFixed(2)}
+                            flex-shrink:0; white-space:nowrap">
+                    ₹${lineTotal.toFixed(2)}
                 </div>
             </div>
         `;
@@ -357,9 +364,9 @@ function renderCheckoutItems() {
 
 // ── Update Totals ──────────────────────────────────────────
 function updateCheckoutTotals() {
+    // Use line_total from the API (already calculated server-side)
     const subtotal = cartItems.reduce((sum, item) => {
-        const price = parseFloat(item.variant?.sale_price || item.variant?.price || 0);
-        return sum + price * item.quantity;
+        return sum + parseFloat(item.line_total || 0);
     }, 0);
 
     const shipping = subtotal >= FREE_SHIPPING ? 0 : SHIP_CHARGE;
@@ -570,7 +577,7 @@ async function handleRazorpay(order) {
         order_number : order.order_number,
     });
 
-    const { razorpay_order_id, amount, currency, key_id } = payRes.data;
+    const { razorpay_order_id, amount, currency, key_id, payment_id } = payRes.data;
 
     const user = Auth.getUser();
 
@@ -594,7 +601,7 @@ async function handleRazorpay(order) {
                     razorpay_order_id   : response.razorpay_order_id,
                     razorpay_payment_id : response.razorpay_payment_id,
                     razorpay_signature  : response.razorpay_signature,
-                    order_number        : order.order_number,
+                    payment_id,
                 });
                 showOrderSuccess(order.order_number);
             } catch (e) {

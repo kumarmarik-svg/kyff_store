@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..extensions import db
-from ..models import Order, Payment
+from ..models import Order, Payment, Cart, CartItem
 import hmac
 import hashlib
 import os
@@ -15,14 +15,19 @@ def get_razorpay_client():
     """
     Imports razorpay inside function to avoid startup errors.
     Only loads when a payment route is actually called.
+    Raises ValueError if credentials are not configured.
     """
-    import razorpay
-    return razorpay.Client(
-        auth=(
-            os.getenv("RAZORPAY_KEY_ID"),
-            os.getenv("RAZORPAY_KEY_SECRET")
+    key_id     = os.getenv("RAZORPAY_KEY_ID")
+    key_secret = os.getenv("RAZORPAY_KEY_SECRET")
+
+    if not key_id or not key_secret:
+        raise ValueError(
+            "Razorpay credentials are not configured. "
+            "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env"
         )
-    )
+
+    import razorpay
+    return razorpay.Client(auth=(key_id, key_secret))
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -113,7 +118,7 @@ def initiate_payment():
         message = "Payment initiated",
         data    = {
             "razorpay_order_id": rz_order["id"],
-            "razorpay_key_id":   os.getenv("RAZORPAY_KEY_ID"),
+            "key_id":            os.getenv("RAZORPAY_KEY_ID"),
             "amount":            amount_paise,
             "currency":          "INR",
             "order_number":      order.order_number,
@@ -173,6 +178,12 @@ def verify_payment():
             gateway_response = data
         )
         payment.order.status = "confirmed"
+
+        # ── Clear cart on successful payment ──────────────────
+        cart = Cart.query.filter_by(user_id=user_id).first()
+        if cart:
+            CartItem.query.filter_by(cart_id=cart.id).delete()
+
         db.session.commit()
 
         return success(
@@ -292,6 +303,12 @@ def cash_on_delivery():
     db.session.add(payment)
 
     order.status = "confirmed"
+
+    # ── Clear cart on COD confirmation ────────────────────────
+    cart = Cart.query.filter_by(user_id=user_id).first()
+    if cart:
+        CartItem.query.filter_by(cart_id=cart.id).delete()
+
     db.session.commit()
 
     return success(
@@ -299,6 +316,90 @@ def cash_on_delivery():
         data    = {
             "order":   order.to_dict(include_items=True),
             "payment": payment.to_dict()
+        }
+    )
+
+
+# ── POST /api/payments/retry/<order_number> ───────────────────
+@payments_bp.route("/retry/<order_number>", methods=["POST"])
+@jwt_required()
+def retry_payment(order_number):
+    """
+    Creates a new Razorpay order for an existing unpaid order.
+    Called when the user clicks "Pay Now / Retry Payment".
+
+    Rules:
+        - Order must belong to the logged-in user
+        - Order status must be 'pending'
+        - Order must not be payment-expired
+        - Each call inserts a NEW row in payments (multiple attempts allowed)
+
+    Returns:
+        200 → new Razorpay order details for frontend checkout
+        400 → order not in a retryable state
+        404 → order not found
+    """
+    user_id = int(get_jwt_identity())
+
+    order = Order.query.filter_by(
+        order_number = order_number,
+        user_id      = user_id
+    ).first()
+
+    if not order:
+        return error("Order not found", 404)
+
+    if order.status != "pending":
+        return error("Only pending orders can be retried")
+
+    if order.is_payment_expired():
+        # Expire it now so the frontend picks up the updated status
+        order.status = "cancelled"
+        db.session.commit()
+        return error("Payment window has expired. This order has been cancelled.")
+
+    if order.is_paid():
+        return error("This order is already paid")
+
+    # ── Create new Razorpay order ──────────────────────────────
+    amount_paise = int(float(order.total) * 100)
+
+    try:
+        client   = get_razorpay_client()
+        rz_order = client.order.create({
+            "amount":   amount_paise,
+            "currency": "INR",
+            "receipt":  order.order_number,
+            "notes": {
+                "order_number": order.order_number,
+                "user_id":      str(user_id),
+                "retry":        "true"
+            }
+        })
+    except Exception as e:
+        return error(f"Payment gateway error: {str(e)}", 502)
+
+    # ── Insert new payment attempt ─────────────────────────────
+    payment = Payment.initiate(
+        order_id         = order.id,
+        gateway          = "razorpay",
+        amount           = order.total,
+        gateway_order_id = rz_order["id"]
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    return success(
+        message = "Payment initiated",
+        data    = {
+            "razorpay_order_id": rz_order["id"],
+            "key_id":            os.getenv("RAZORPAY_KEY_ID"),
+            "amount":            amount_paise,
+            "currency":          "INR",
+            "order_number":      order.order_number,
+            "payment_id":        payment.id,
+            "payment_expires_at": order.payment_expires_at.isoformat()
+                                  if order.payment_expires_at else None,
         }
     )
 
