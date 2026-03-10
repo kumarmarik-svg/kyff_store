@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime, timedelta
 from ..extensions import db
-from ..models import Order, Payment, Cart, CartItem
+from ..models import Order, Payment, Cart, CartItem, OrderItem, ProductVariant
 import hmac
 import hashlib
 import os
@@ -83,8 +84,32 @@ def initiate_payment():
     if order.status == "cancelled":
         return error("Cannot initiate payment for a cancelled order")
 
+    if order.status == "expired":
+        return error("This order has expired and can no longer be paid")
+
     if order.is_paid():
         return error("This order is already paid")
+
+    # ── Prevent duplicate Razorpay order creation ──────────────
+    # If an initiated payment already exists for this order, return it
+    # so the frontend can resume the same Razorpay checkout session.
+    existing_payment = Payment.query.filter_by(
+        order_id = order.id,
+        status   = "initiated"
+    ).first()
+
+    if existing_payment and existing_payment.gateway_order_id:
+        return success(
+            message = "Payment already initiated — resuming existing session",
+            data    = {
+                "razorpay_order_id": existing_payment.gateway_order_id,
+                "key_id":            os.getenv("RAZORPAY_KEY_ID"),
+                "amount":            int(float(order.total) * 100),
+                "currency":          "INR",
+                "order_number":      order.order_number,
+                "payment_id":        existing_payment.id,
+            }
+        )
 
     # ── Create Razorpay order ─────────────────────────────────
     # Razorpay requires amount in PAISE (1 rupee = 100 paise)
@@ -173,11 +198,27 @@ def verify_payment():
 
     # ── Signature match → payment genuine ─────────────────────
     if hmac.compare_digest(expected, rz_signature):
+        order = payment.order
         payment.mark_success(
             transaction_id   = rz_payment_id,
             gateway_response = data
         )
-        payment.order.status = "confirmed"
+        order.status = "confirmed"
+
+        # ── Cancel other pending/payment_failed orders for this user ──
+        # Stock is restored for those orders so items are back on sale.
+        stale_orders = Order.query.filter(
+            Order.user_id == user_id,
+            Order.id      != order.id,
+            Order.status.in_(["pending", "payment_failed"])
+        ).all()
+        for stale in stale_orders:
+            for item in OrderItem.query.filter_by(order_id=stale.id).all():
+                if item.variant_id:
+                    variant = ProductVariant.query.get(item.variant_id)
+                    if variant:
+                        variant.restore_stock(item.quantity)
+            stale.status = "cancelled"
 
         # ── Clear cart on successful payment ──────────────────
         cart = Cart.query.filter_by(user_id=user_id).first()
@@ -189,7 +230,7 @@ def verify_payment():
         return success(
             message = "Payment verified successfully",
             data    = {
-                "order":   payment.order.to_dict(include_items=True),
+                "order":   order.to_dict(include_items=True),
                 "payment": payment.to_dict()
             }
         )
@@ -197,6 +238,11 @@ def verify_payment():
     # ── Signature mismatch → possible tampering ───────────────
     else:
         payment.mark_failed(gateway_response=data)
+        # Mark order as payment_failed but do NOT restore stock.
+        # The user may retry immediately; restoring stock risks another
+        # buyer purchasing the same item before the retry completes.
+        # Stock is only restored on order expiry or explicit cancellation.
+        payment.order.status = "payment_failed"
         db.session.commit()
         return error("Payment verification failed. Please contact support.", 400)
 
@@ -237,11 +283,29 @@ def razorpay_webhook():
         ).first()
 
         if payment and not payment.is_successful():
+            order = payment.order
             payment.mark_success(
                 transaction_id   = rz_payment_id,
                 gateway_response = event
             )
-            payment.order.status = "confirmed"
+            order.status = "confirmed"
+
+            # Cancel any other pending/payment_failed orders for this user
+            # and restore their stock so those items go back on sale.
+            if order.user_id:
+                stale_orders = Order.query.filter(
+                    Order.user_id == order.user_id,
+                    Order.id      != order.id,
+                    Order.status.in_(["pending", "payment_failed"])
+                ).all()
+                for stale in stale_orders:
+                    for item in OrderItem.query.filter_by(order_id=stale.id).all():
+                        if item.variant_id:
+                            variant = ProductVariant.query.get(item.variant_id)
+                            if variant:
+                                variant.restore_stock(item.quantity)
+                    stale.status = "cancelled"
+
             db.session.commit()
 
     # ── payment.failed ────────────────────────────────────────
@@ -255,6 +319,11 @@ def razorpay_webhook():
 
         if payment and not payment.is_successful():
             payment.mark_failed(gateway_response=event)
+            order = payment.order
+            if order and order.status in ("pending", "payment_failed"):
+                # Mark failed but do NOT restore stock — user may retry.
+                # Stock is only released on expiry or cancellation.
+                order.status = "payment_failed"
             db.session.commit()
 
     return jsonify({"status": "ok"}), 200
@@ -293,12 +362,15 @@ def cash_on_delivery():
         return error("Cannot confirm a cancelled order")
 
     # ── Create COD payment record ─────────────────────────────
+    # COD orders are immediately confirmed — no gateway verification step,
+    # so the payment goes straight to 'success'.
     payment = Payment(
         order_id = order.id,
         gateway  = "cod",
         amount   = order.total,
         currency = "INR",
-        status   = "pending"
+        status   = "success",
+        paid_at  = datetime.utcnow()
     )
     db.session.add(payment)
 
@@ -330,9 +402,10 @@ def retry_payment(order_number):
 
     Rules:
         - Order must belong to the logged-in user
-        - Order status must be 'pending'
+        - Order status must be 'pending' or 'payment_failed'
         - Order must not be payment-expired
-        - Each call inserts a NEW row in payments (multiple attempts allowed)
+        - Reuses the existing 'initiated' payment record if one exists;
+          creates a new row only when the previous attempt was 'failed'.
 
     Returns:
         200 → new Razorpay order details for frontend checkout
@@ -349,17 +422,33 @@ def retry_payment(order_number):
     if not order:
         return error("Order not found", 404)
 
-    if order.status != "pending":
-        return error("Only pending orders can be retried")
+    if order.status == "confirmed":
+        return error("This order is already paid and confirmed")
+
+    if order.status == "cancelled":
+        return error("Cancelled orders cannot be retried")
+
+    if order.status == "expired":
+        return error("This order has expired and cannot be retried")
+
+    if order.status not in ("pending", "payment_failed"):
+        return error(f"Cannot retry payment for order with status '{order.status}'")
 
     if order.is_payment_expired():
-        # Expire it now so the frontend picks up the updated status
-        order.status = "cancelled"
+        # Window elapsed — expire the order and restore stock now
+        order.expire_if_needed()
         db.session.commit()
-        return error("Payment window has expired. This order has been cancelled.")
+        return error("Payment window has expired. This order has been marked as expired.")
 
     if order.is_paid():
         return error("This order is already paid")
+
+    # ── payment_failed retry: stock is still reserved, reset window ──
+    # Do NOT reduce stock again — the original reduction from place_order
+    # is still in effect. Just give the user a fresh 15-minute window.
+    if order.status == "payment_failed":
+        order.payment_expires_at = datetime.utcnow() + timedelta(minutes=15)
+        order.status = "pending"
 
     # ── Create new Razorpay order ──────────────────────────────
     amount_paise = int(float(order.total) * 100)
@@ -379,14 +468,28 @@ def retry_payment(order_number):
     except Exception as e:
         return error(f"Payment gateway error: {str(e)}", 502)
 
-    # ── Insert new payment attempt ─────────────────────────────
-    payment = Payment.initiate(
-        order_id         = order.id,
-        gateway          = "razorpay",
-        amount           = order.total,
-        gateway_order_id = rz_order["id"]
-    )
-    db.session.add(payment)
+    # ── Reuse existing initiated payment record if available ───
+    # A previous attempt that never reached verify (user closed popup)
+    # leaves an 'initiated' payment row. Reuse it with the new Razorpay
+    # order ID so verify_payment() can find it correctly.
+    # If the previous attempt was marked 'failed' (webhook), create fresh.
+    existing_payment = Payment.query.filter_by(
+        order_id = order.id,
+        status   = "initiated"
+    ).first()
+
+    if existing_payment:
+        existing_payment.gateway_order_id = rz_order["id"]
+        payment = existing_payment
+    else:
+        payment = Payment.initiate(
+            order_id         = order.id,
+            gateway          = "razorpay",
+            amount           = order.total,
+            gateway_order_id = rz_order["id"]
+        )
+        db.session.add(payment)
+
     db.session.commit()
 
     return success(

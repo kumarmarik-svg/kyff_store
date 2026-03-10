@@ -96,7 +96,7 @@
                                 </span>
                             </div>
                             <div class="summary-row total">
-                                <span>Total Paid</span>
+                                <span id="sum-total-label">Total Paid</span>
                                 <span>₹<span id="sum-total"></span></span>
                             </div>
                         </div>
@@ -262,6 +262,14 @@ function renderOrderDetail(order) {
         ? `${capitalize(payment.gateway)} — ${payment.status === 'success' ? 'Paid' : capitalize(payment.status)}`
         : 'Pending';
     document.getElementById('sum-payment').textContent = paymentLabel;
+
+    // Total row label — depends on gateway and payment status
+    const totalLabel = (() => {
+        if (!payment || payment.gateway === 'cod') return 'Total Amount';
+        if (payment.status === 'success')           return 'Total Paid';
+        return 'Amount to Pay';
+    })();
+    document.getElementById('sum-total-label').textContent = totalLabel;
 
     // Delivery address
     document.getElementById('delivery-address').innerHTML = `
@@ -437,6 +445,32 @@ function renderTimeline(currentStatus) {
         return;
     }
 
+    if (currentStatus === 'expired') {
+        container.innerHTML = `
+            <div class="timeline-item cancelled">
+                <div class="timeline-dot">⏰</div>
+                <div class="timeline-content">
+                    <h4>Payment Window Expired</h4>
+                    <p>Payment was not completed in time. Reserved stock has been released.</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    if (currentStatus === 'payment_failed') {
+        container.innerHTML = `
+            <div class="timeline-item cancelled">
+                <div class="timeline-dot">⚠️</div>
+                <div class="timeline-content">
+                    <h4>Payment Failed</h4>
+                    <p>Your last payment attempt was unsuccessful. You can retry from My Orders.</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
     const currentIdx = STATUS_ORDER.indexOf(currentStatus);
 
     ORDER_STEPS.forEach((step, i) => {
@@ -542,11 +576,20 @@ async function reorderAll() {
 
 
 // ── Helpers ────────────────────────────────────────────────
+// Timestamps from the API are naive UTC ISO strings (no trailing 'Z').
+// Appending 'Z' forces the browser to parse them as UTC, then we display
+// in IST (Asia/Kolkata, UTC+5:30) — matching backend storage in UTC.
 function formatDate(str) {
     if (!str) return '';
-    return new Date(str).toLocaleDateString('en-IN', {
-        day: 'numeric', month: 'long', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+    const utc = str.endsWith('Z') ? str : str + 'Z';
+    return new Date(utc).toLocaleString('en-IN', {
+        timeZone : 'Asia/Kolkata',
+        day      : 'numeric',
+        month    : 'long',
+        year     : 'numeric',
+        hour     : '2-digit',
+        minute   : '2-digit',
+        hour12   : true,
     });
 }
 
@@ -556,8 +599,15 @@ function capitalize(str) {
 
 function statusIcon(status) {
     const icons = {
-        pending:'🕐', confirmed:'✅', processing:'⚙️',
-        shipped:'🚚', delivered:'📦', cancelled:'❌', refunded:'↩️'
+        pending        : '🕐',
+        confirmed      : '✅',
+        processing     : '⚙️',
+        shipped        : '🚚',
+        delivered      : '📦',
+        cancelled      : '❌',
+        refunded       : '↩️',
+        expired        : '⏰',
+        payment_failed : '⚠️',
     };
     return icons[status] || '📋';
 }

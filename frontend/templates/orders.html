@@ -39,13 +39,16 @@
         <div style="display:flex; gap:var(--space-2); overflow-x:auto;
                     padding-bottom:var(--space-2); margin-bottom:var(--space-6);
                     scrollbar-width:none">
-            <button class="tab-btn active" onclick="filterOrders('all')"    id="tab-all">All</button>
-            <button class="tab-btn"        onclick="filterOrders('pending')"    id="tab-pending">Pending</button>
-            <button class="tab-btn"        onclick="filterOrders('confirmed')"  id="tab-confirmed">Confirmed</button>
-            <button class="tab-btn"        onclick="filterOrders('processing')" id="tab-processing">Processing</button>
-            <button class="tab-btn"        onclick="filterOrders('shipped')"    id="tab-shipped">Shipped</button>
-            <button class="tab-btn"        onclick="filterOrders('delivered')"  id="tab-delivered">Delivered</button>
-            <button class="tab-btn"        onclick="filterOrders('cancelled')"  id="tab-cancelled">Cancelled</button>
+            <button class="tab-btn active" onclick="filterOrders('all')"             id="tab-all">All</button>
+            <button class="tab-btn"        onclick="filterOrders('pending')"         id="tab-pending">Pending</button>
+            <button class="tab-btn"        onclick="filterOrders('confirmed')"       id="tab-confirmed">Confirmed</button>
+            <button class="tab-btn"        onclick="filterOrders('processing')"      id="tab-processing">Processing</button>
+            <button class="tab-btn"        onclick="filterOrders('shipped')"         id="tab-shipped">Shipped</button>
+            <button class="tab-btn"        onclick="filterOrders('delivered')"       id="tab-delivered">Delivered</button>
+            <button class="tab-btn"        onclick="filterOrders('cancelled')"       id="tab-cancelled">Cancelled</button>
+            <button class="tab-btn"        onclick="filterOrders('expired')"         id="tab-expired">Expired</button>
+            <button class="tab-btn"        onclick="filterOrders('refunded')"        id="tab-refunded">Refund</button>
+            <button class="tab-btn"        onclick="filterOrders('payment_failed')"  id="tab-payment_failed">Payment Failed</button>
         </div>
 
         <!-- Count -->
@@ -451,10 +454,17 @@ function renderPagination(totalPages) {
 
 
 // ── Helpers ────────────────────────────────────────────────
+// Timestamps from the API are naive UTC ISO strings (no trailing 'Z').
+// Appending 'Z' forces the browser to parse them as UTC, then we display
+// in IST (Asia/Kolkata, UTC+5:30) — matching backend storage in UTC.
 function formatDate(str) {
     if (!str) return '';
-    return new Date(str).toLocaleDateString('en-IN', {
-        day: 'numeric', month: 'short', year: 'numeric'
+    const utc = str.endsWith('Z') ? str : str + 'Z';
+    return new Date(utc).toLocaleDateString('en-IN', {
+        timeZone : 'Asia/Kolkata',
+        day      : 'numeric',
+        month    : 'short',
+        year     : 'numeric',
     });
 }
 
@@ -464,13 +474,15 @@ function capitalize(str) {
 
 function statusIcon(status) {
     const icons = {
-        pending    : '🕐',
-        confirmed  : '✅',
-        processing : '⚙️',
-        shipped    : '🚚',
-        delivered  : '📦',
-        cancelled  : '❌',
-        refunded   : '↩️',
+        pending        : '🕐',
+        confirmed      : '✅',
+        processing     : '⚙️',
+        shipped        : '🚚',
+        delivered      : '📦',
+        cancelled      : '❌',
+        refunded       : '↩️',
+        expired        : '⏰',
+        payment_failed : '⚠️',
     };
     return icons[status] || '📋';
 }

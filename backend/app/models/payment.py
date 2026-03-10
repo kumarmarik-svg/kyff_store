@@ -51,7 +51,6 @@ class Payment(db.Model):
     status = db.Column(
         db.Enum(
             "initiated",
-            "pending",
             "success",
             "failed",
             "refunded",

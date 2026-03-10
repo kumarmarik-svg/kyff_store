@@ -45,11 +45,13 @@ class Order(db.Model):
     status = db.Column(
         db.Enum(
             "pending",
+            "payment_failed",
             "confirmed",
             "processing",
             "shipped",
             "delivered",
             "cancelled",
+            "expired",
             "refunded",
             name="order_status"
         ),
@@ -73,6 +75,9 @@ class Order(db.Model):
     )
 
     # ── Timestamps ────────────────────────────────────────────
+    # All timestamps are stored in UTC (no timezone info attached).
+    # The frontend is responsible for converting to the user's local timezone
+    # before display (e.g. new Date(isoString + 'Z') in JavaScript).
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow,
                            onupdate=datetime.utcnow)
@@ -114,9 +119,9 @@ class Order(db.Model):
     def is_payment_expired(self):
         """
         Returns True if the payment window has closed and the order
-        was never paid.  Only relevant while status == 'pending'.
+        was never paid.  Relevant while status is 'pending' or 'payment_failed'.
         """
-        if self.status != "pending":
+        if self.status not in ("pending", "payment_failed"):
             return False
         if not self.payment_expires_at:
             return False
@@ -124,13 +129,21 @@ class Order(db.Model):
 
     def expire_if_needed(self):
         """
-        Auto-cancels the order when the payment window has elapsed.
-        Call this before returning any pending order to the frontend.
+        Marks the order as expired when the payment window has elapsed and
+        restores stock for all items so other buyers can purchase them.
+        Call this before returning any pending/payment_failed order to the frontend.
         Does NOT commit — caller must call db.session.commit().
-        Returns True if the order was just cancelled.
+        Returns True if the order was just expired.
         """
         if self.is_payment_expired() and not self.is_paid():
-            self.status = "cancelled"
+            from .order_item import OrderItem
+            from .product_variant import ProductVariant
+            for item in OrderItem.query.filter_by(order_id=self.id).all():
+                if item.variant_id:
+                    variant = ProductVariant.query.get(item.variant_id)
+                    if variant:
+                        variant.restore_stock(item.quantity)
+            self.status = "expired"
             return True
         return False
 
@@ -138,8 +151,9 @@ class Order(db.Model):
         """
         Order can only be cancelled before it is shipped.
         Once shipped, customer must request a return instead.
+        payment_failed orders are cancellable — stock is still reserved.
         """
-        return self.status in ("pending", "confirmed", "processing")
+        return self.status in ("pending", "payment_failed", "confirmed", "processing")
 
     def is_paid(self):
         """Returns True if any payment for this order is successful."""

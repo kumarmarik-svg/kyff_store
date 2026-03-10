@@ -551,14 +551,15 @@ p {
 /* ── Page Header ─────────────────────────────────────────── */
 .page-header {
     background    : var(--color-bg-light);
-    padding       : var(--space-8) 0;
+    padding       : var(--space-4) 0;   /* 16px — compact, matches cart header */
     border-bottom : 1px solid var(--color-border);
-    margin-bottom : var(--space-8);
+    margin-bottom : var(--space-5);
 }
 
 .page-header h1 {
-    font-size : var(--text-3xl);
-    color     : var(--color-primary-dark);
+    font-size     : var(--text-3xl);
+    color         : var(--color-primary-dark);
+    margin-bottom : var(--space-1);     /* tight gap before breadcrumb */
 }
 
 .breadcrumb {

@@ -82,6 +82,14 @@ class Address(db.Model):
     )
 
     # ── Methods ───────────────────────────────────────────────
+    def set_as_default(self):
+        """
+        Makes this address the user's default, clearing any existing default.
+        Does NOT commit — caller is responsible for db.session.commit().
+        """
+        Address.query.filter_by(user_id=self.user_id).update({"is_default": False})
+        self.is_default = True
+
     def to_dict(self):
         return {
             "id":         self.id,
@@ -95,6 +103,7 @@ class Address(db.Model):
             "pincode":    self.pincode,
             "country":    self.country,
             "is_default": self.is_default,
+            "created_at": self.created_at.isoformat(),
         }
 
     def __repr__(self):

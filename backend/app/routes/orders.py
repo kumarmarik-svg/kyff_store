@@ -23,6 +23,129 @@ def success(message, data=None, code=200):
     return jsonify(response), code
 
 
+def _address_to_shipping(address):
+    """Converts a saved Address row into the order shipping snapshot dict."""
+    return {
+        "name":    address.full_name,
+        "phone":   address.phone,
+        "line1":   address.line1,
+        "line2":   address.line2,
+        "city":    address.city,
+        "state":   address.state,
+        "pincode": address.pincode,
+    }
+
+
+def _resolve_shipping_address(user_id, data):
+    """
+    Resolves the shipping address for an order from the request body.
+
+    Resolution priority:
+        1. address_id  → load saved address by primary key
+        2. address obj → deduplicate on (phone, line1, city, pincode);
+                         optionally save if save_address=true
+        3. (neither)   → fall back to the user's default address
+
+    Top-level request flags (read from the root of the JSON body):
+        save_address : bool — persist a new inline address to the DB
+        set_default  : bool — make the saved address the new default
+
+    Returns:
+        (shipping_dict, None)          on success
+        (None,          error_response) on failure — return it from the route
+    """
+    address_id  = data.get("address_id")
+    address_obj = data.get("address")
+    save        = bool(data.get("save_address"))
+    set_def     = bool(data.get("set_default"))
+
+    # ── 1. Saved address by ID ────────────────────────────────
+    if address_id:
+        address = Address.query.filter_by(
+            id      = address_id,
+            user_id = user_id
+        ).first()
+        if not address:
+            return None, error("Address not found", 404)
+        return _address_to_shipping(address), None
+
+    # ── 2. Inline address object ──────────────────────────────
+    if address_obj:
+        required_fields = ["full_name", "phone", "line1", "city", "state", "pincode"]
+        for field in required_fields:
+            if not (address_obj.get(field) or "").strip():
+                return None, error(f"Address field '{field}' is required")
+
+        full_name = address_obj["full_name"].strip()
+        phone     = address_obj["phone"].strip()
+        line1     = address_obj["line1"].strip()
+        line2     = (address_obj.get("line2") or "").strip() or None
+        city      = address_obj["city"].strip()
+        state     = address_obj["state"].strip()
+        pincode   = address_obj["pincode"].strip()
+
+        # Deduplicate: if this address already exists for the user,
+        # reuse it — no insert, no duplicate row.
+        existing = Address.query.filter_by(
+            user_id = user_id,
+            phone   = phone,
+            line1   = line1,
+            city    = city,
+            pincode = pincode,
+        ).first()
+
+        if existing:
+            return _address_to_shipping(existing), None
+
+        # New address — optionally persist to the addresses table.
+        if save:
+            is_first = Address.query.filter_by(user_id=user_id).count() == 0
+
+            if set_def or is_first:
+                # Clear any existing default before setting the new one.
+                # A user must have at most one default address.
+                Address.query.filter_by(user_id=user_id).update({"is_default": False})
+                is_default = True
+            else:
+                is_default = False
+
+            new_address = Address(
+                user_id    = user_id,
+                full_name  = full_name,
+                phone      = phone,
+                line1      = line1,
+                line2      = line2,
+                city       = city,
+                state      = state,
+                pincode    = pincode,
+                is_default = is_default,
+            )
+            db.session.add(new_address)
+            # flush so the row gets an id; the caller commits with the order
+            db.session.flush()
+
+        return {
+            "name":    full_name,
+            "phone":   phone,
+            "line1":   line1,
+            "line2":   line2,
+            "city":    city,
+            "state":   state,
+            "pincode": pincode,
+        }, None
+
+    # ── 3. Fall back to default address ──────────────────────
+    default_address = Address.query.filter_by(
+        user_id    = user_id,
+        is_default = True
+    ).first()
+
+    if not default_address:
+        return None, error("Shipping address is required")
+
+    return _address_to_shipping(default_address), None
+
+
 # ── POST /api/orders/place ────────────────────────────────────
 @orders_bp.route("/place", methods=["POST"])
 @jwt_required()
@@ -42,11 +165,19 @@ def place_order():
         8. Return order details (cart cleared later on payment success)
 
     Request body (JSON):
-        address_id  : int, use saved address
+        address_id   : int    — use a saved address by ID
         OR
-        address     : object, use new address directly
+        address      : object — inline address fields:
+                         full_name, phone, line1, [line2],
+                         city, state, pincode
+        save_address : bool   — persist the inline address (default false)
+        set_default  : bool   — make it the user's new default (default false)
+        notes        : string — optional delivery instructions
 
-        notes       : string, optional delivery instructions
+    Address resolution priority:
+        1. address_id  → load saved address
+        2. address obj → deduplicate; save if save_address=true
+        3. (neither)   → use the user's default address
 
     Returns:
         201 → order placed successfully
@@ -58,6 +189,22 @@ def place_order():
 
     if not data:
         return error("Request body is required")
+
+    # ── Block duplicate active orders ──────────────────────────
+    # Prevent a user from stacking multiple unpaid orders that hold
+    # stock. A pending or payment_failed order with an unexpired
+    # payment window must be resolved first.
+    active_order = Order.query.filter(
+        Order.user_id == user_id,
+        Order.status.in_(["pending", "payment_failed"]),
+        Order.payment_expires_at > datetime.utcnow()
+    ).first()
+
+    if active_order:
+        return error(
+            f"You already have an unpaid order ({active_order.order_number}) "
+            f"awaiting payment. Complete or cancel it before placing a new order."
+        )
 
     try:
         # ── Get cart ──────────────────────────────────────────
@@ -72,60 +219,35 @@ def place_order():
             return error("Your cart is empty")
 
         # ── Resolve shipping address ──────────────────────────
-        address_id  = data.get("address_id")
-        address_obj = data.get("address")
+        # Handles: saved address / inline address (with dedup + optional
+        # save) / default address fallback.  See _resolve_shipping_address.
+        shipping, addr_error = _resolve_shipping_address(user_id, data)
+        if addr_error:
+            return addr_error
 
-        if address_id:
-            # Use saved address
-            address = Address.query.filter_by(
-                id      = address_id,
-                user_id = user_id
-            ).first()
-            if not address:
-                return error("Address not found", 404)
+        # ── Lock variants + validate stock + calculate totals ───
+        # with_for_update() issues SELECT ... FOR UPDATE so concurrent
+        # requests targeting the same row must wait.  Stock is re-checked
+        # against the locked row, guaranteeing that only one request can
+        # reduce a given variant's stock at a time.
+        locked_variants = {}   # variant_id → locked ProductVariant instance
+        stock_errors    = []
+        subtotal        = 0.0
 
-            shipping = {
-                "name":    address.full_name,
-                "phone":   address.phone,
-                "line1":   address.line1,
-                "line2":   address.line2,
-                "city":    address.city,
-                "state":   address.state,
-                "pincode": address.pincode,
-            }
-
-        elif address_obj:
-            # Use inline address from request
-            required_fields = ["full_name", "phone", "line1", "city", "state", "pincode"]
-            for field in required_fields:
-                if not (address_obj.get(field) or "").strip():
-                    return error(f"Address field '{field}' is required")
-
-            shipping = {
-                "name":    address_obj["full_name"].strip(),
-                "phone":   address_obj["phone"].strip(),
-                "line1":   address_obj["line1"].strip(),
-                "line2":   (address_obj.get("line2") or "").strip() or None,
-                "city":    address_obj["city"].strip(),
-                "state":   address_obj["state"].strip(),
-                "pincode": address_obj["pincode"].strip(),
-            }
-
-        else:
-            return error("Shipping address is required")
-
-        # ── Validate stock for all items before touching DB ───
-        # Check everything BEFORE making any changes so no partial
-        # stock reductions happen if one item fails.
-        stock_errors = []
         for item in cart_items:
-            variant = ProductVariant.query.get(item.variant_id)
+            variant = (
+                db.session.query(ProductVariant)
+                .filter(ProductVariant.id == item.variant_id)
+                .with_for_update()
+                .first()
+            )
+
             if not variant or not variant.is_active:
-                # Safely get a name for the error message without
-                # touching item.variant which may also be None.
                 label = getattr(variant, "label", None) or f"item #{item.variant_id}"
                 stock_errors.append(f"'{label}' is no longer available")
-            elif item.quantity > variant.stock_qty:
+                continue
+
+            if item.quantity > variant.stock_qty:
                 product_name = (
                     variant.product.name if variant.product else "product"
                 )
@@ -133,19 +255,15 @@ def place_order():
                     f"Only {variant.stock_qty} units available "
                     f"for '{product_name} — {variant.label}'"
                 )
+                continue
+
+            locked_variants[item.variant_id] = variant
+            subtotal += float(variant.effective_price()) * item.quantity
 
         if stock_errors:
             return error(" | ".join(stock_errors))
 
-        # ── Calculate totals ──────────────────────────────────
-        subtotal = round(
-            sum(
-                float(ProductVariant.query.get(item.variant_id).effective_price())
-                * item.quantity
-                for item in cart_items
-            ), 2
-        )
-
+        subtotal        = round(subtotal, 2)
         shipping_charge = ShippingRule.get_charge_for(subtotal)
         total           = round(subtotal + shipping_charge, 2)
 
@@ -166,15 +284,17 @@ def place_order():
             total               = total,
             status              = "pending",
             notes               = (data.get("notes") or "").strip() or None,
-            # Payment must be completed within 15 minutes
-            payment_expires_at  = datetime.utcnow() + timedelta(minutes=15),
+            # Payment must be completed within 15 minutes (UTC)
+            payment_expires_at  = datetime.utcnow() + timedelta(minutes=2),
         )
         db.session.add(order)
         db.session.flush()   # gets order.id before final commit
 
         # ── Create order items + reduce stock ─────────────────
+        # Reuse the locked variant instances acquired above — no extra
+        # queries, and the lock is still held within this transaction.
         for item in cart_items:
-            variant    = ProductVariant.query.get(item.variant_id)
+            variant    = locked_variants[item.variant_id]
             order_item = OrderItem.build_from_cart_item(item, order.id)
             db.session.add(order_item)
             variant.reduce_stock(item.quantity)
@@ -223,6 +343,24 @@ def list_orders():
     user_id = int(get_jwt_identity())
     status  = request.args.get("status", None)
 
+    # ── Pre-flight expiry ─────────────────────────────────────
+    # Expire ALL stale pending/payment_failed orders for this user
+    # BEFORE running the main query.  Without this, the SQL filter
+    # applied when status="pending" excludes orders whose window has
+    # elapsed, so the lazy pass below never sees them and they stay
+    # "pending" in the DB until the background scheduler fires.
+    try:
+        stale = Order.query.filter(
+            Order.user_id == user_id,
+            Order.status.in_(["pending", "payment_failed"]),
+            Order.payment_expires_at <= datetime.utcnow()
+        ).all()
+        if stale:
+            if any(o.expire_if_needed() for o in stale):
+                db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     # ── Fetch orders — no JOIN to payments ────────────────────
     try:
         query = Order.query.filter(Order.user_id == user_id)
@@ -255,6 +393,25 @@ def list_orders():
             "message": "Orders fetched",
             "data":    {"orders": []}
         }), 200
+
+    # ── Lazy expiry pass ──────────────────────────────────────
+    # Expire any orders whose payment window has elapsed since the
+    # scheduler last ran.  This guarantees the user always sees an
+    # up-to-date status the moment they open "My Orders", even if
+    # the background job hasn't fired yet.
+    any_expired = False
+    for order in orders:
+        try:
+            if order.expire_if_needed():
+                any_expired = True
+        except Exception:
+            pass  # never let expiry logic crash the list response
+
+    if any_expired:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     # ── Serialise each order safely ───────────────────────────
     result = []
@@ -302,9 +459,13 @@ def list_orders():
             # payment_expires_at — column may not exist if migration
             # hasn't been applied; use getattr with None default.
             expires_at = getattr(order, "payment_expires_at", None)
-            is_expired = False
-            if expires_at and order.status == "pending":
-                is_expired = datetime.utcnow() > expires_at
+            # is_payment_expired is True for pending AND payment_failed
+            # orders whose window has elapsed (lazy expiry above already
+            # committed the DB change, so status will read "expired" for
+            # those; this flag is a belt-and-suspenders guard for the
+            # serialised snapshot).
+            is_expired = order.status in ("pending", "payment_failed") and \
+                         bool(expires_at and datetime.utcnow() > expires_at)
 
             result.append({
                 "id":                 order.id,
@@ -319,9 +480,9 @@ def list_orders():
                 "payment_expires_at": expires_at.isoformat() if expires_at else None,
                 "is_payment_expired": is_expired,
                 "is_paid":            payment_status == "success",
-                "is_cancellable":     order.status in (
-                                          "pending", "confirmed", "processing"
-                                      ),
+                # Use the model method so the list stays in sync with
+                # any future changes to cancellability rules.
+                "is_cancellable":     order.is_cancellable(),
                 "notes":              order.notes,
                 "created_at":         order.created_at.isoformat(),
                 "items":              items,

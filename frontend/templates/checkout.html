@@ -385,23 +385,35 @@ function updateCheckoutTotals() {
 // ── Load Saved Addresses ───────────────────────────────────
 async function loadSavedAddresses() {
     try {
-        const res = await API.get('/api/auth/me');
-        const user = res.data?.user;
+        // Fetch addresses + user profile in parallel
+        const [addrRes, userRes] = await Promise.allSettled([
+            API.get('/api/addresses'),
+            API.get('/api/auth/me'),
+        ]);
 
-        if (user?.addresses?.length > 0) {
-            savedAddresses = user.addresses;
-            renderSavedAddresses(user.addresses);
+        // Always pre-fill name / phone from user profile
+        const user = userRes.status === 'fulfilled' ? userRes.value.data?.user : null;
+        if (user?.name)  document.getElementById('addr-name').value  = user.name;
+        if (user?.phone) document.getElementById('addr-phone').value = user.phone;
+
+        // Load addresses from the dedicated endpoint
+        const addresses = addrRes.status === 'fulfilled'
+            ? (addrRes.value.data?.addresses || [])
+            : [];
+
+        if (addresses.length > 0) {
+            savedAddresses = addresses;
+            renderSavedAddresses(addresses);
             document.getElementById('saved-addresses').style.display  = 'block';
             document.getElementById('new-address-form').style.display = 'none';
 
-            // Auto-select default
-            const def = user.addresses.find(a => a.is_default) || user.addresses[0];
+            // Auto-select the default address (backend returns it first)
+            const def = addresses.find(a => a.is_default) || addresses[0];
             if (def) selectAddress(def);
+        } else {
+            // No saved addresses — the new-address form is already visible.
+            // Nothing more to autofill here; name/phone filled above.
         }
-
-        // Pre-fill name/phone from user profile
-        if (user?.name)  document.getElementById('addr-name').value  = user.name;
-        if (user?.phone) document.getElementById('addr-phone').value = user.phone;
 
     } catch (e) {}
 }
@@ -524,24 +536,34 @@ async function placeOrder() {
     const btn = document.getElementById('place-order-btn');
 
     try {
-        // Validate address
-        const address = getAddressData();
-
         btn.disabled  = true;
         btn.classList.add('loading');
 
-        // Save address if requested
-        if (document.getElementById('addr-save')?.checked) {
-            try {
-                await API.post('/api/auth/me/addresses', address);
-            } catch (e) {} // non-blocking
+        const notes      = document.getElementById('order-notes').value.trim() || null;
+        const formHidden = document.getElementById('new-address-form').style.display === 'none';
+
+        let payload;
+
+        if (selectedAddress && formHidden) {
+            // Saved address selected — send address_id; backend resolves the rest
+            payload = { address_id: selectedAddress.id, notes };
+        } else {
+            // New address typed manually — validate, then optionally persist
+            const address = getAddressData();  // throws on validation failure
+            const saveIt  = document.getElementById('addr-save')?.checked;
+
+            if (saveIt) {
+                // Persist via the addresses API (non-blocking — order proceeds even if it fails)
+                try {
+                    await API.post('/api/addresses', address);
+                } catch (e) {}
+            }
+
+            payload = { address, save_address: !!saveIt, notes };
         }
 
         // Place order
-        const orderRes = await API.post('/api/orders/place', {
-            address,
-            notes : document.getElementById('order-notes').value.trim() || null,
-        });
+        const orderRes = await API.post('/api/orders/place', payload);
 
         const order = orderRes.data?.order;
         if (!order) throw new Error('Order creation failed');

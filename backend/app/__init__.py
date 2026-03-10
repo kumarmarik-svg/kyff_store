@@ -37,6 +37,7 @@ def create_app():
     from .routes.reviews    import reviews_bp
     from .routes.admin      import admin_bp
     from .routes.views      import views_bp
+    from .routes.addresses  import addresses_bp
 
     app.register_blueprint(auth_bp,       url_prefix="/api/auth")
     app.register_blueprint(products_bp,   url_prefix="/api/products")
@@ -46,6 +47,20 @@ def create_app():
     app.register_blueprint(payments_bp,   url_prefix="/api/payments")
     app.register_blueprint(reviews_bp,    url_prefix="/api/reviews")
     app.register_blueprint(admin_bp,      url_prefix="/api/admin")
-    app.register_blueprint(views_bp)  
+    app.register_blueprint(addresses_bp,  url_prefix="/api/addresses")
+    app.register_blueprint(views_bp)
+
+    # ── Jinja template filters ─────────────────────────────────
+    # Backend stores timestamps in UTC; templates convert to IST.
+    from .utils.timezone import utc_to_ist, strftime
+    app.jinja_env.filters["ist"]      = utc_to_ist
+    app.jinja_env.filters["strftime"] = strftime
+
+    # ── Background scheduler ───────────────────────────────────
+    # Runs every 5 minutes to expire abandoned orders and restore stock.
+    # Acts as a safety net for orders whose users never revisit them.
+    # Lazy expiry in routes handles the real-time case.
+    from .scheduler import init_scheduler
+    init_scheduler(app)
 
     return app

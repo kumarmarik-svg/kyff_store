@@ -679,14 +679,15 @@
    CART PAGE
    ══════════════════════════════════════════════════════════ */
 
-/* Compact page header — overrides the global 32px padding */
+/* .cart-page-header values are now the global default in base.css (.page-header).
+   Kept here for backwards compatibility — no visual effect. */
 .cart-page-header {
-    padding       : var(--space-4) 0;  /* 16px top/bottom */
-    margin-bottom : var(--space-5);    /* 20px below header */
+    padding       : var(--space-4) 0;
+    margin-bottom : var(--space-5);
 }
 
 .cart-page-header h1 {
-    margin-bottom : var(--space-1);    /* tight gap before breadcrumb */
+    margin-bottom : var(--space-1);
 }
 
 /* ── Two-column grid (stacks on mobile) ── */
@@ -1155,13 +1156,17 @@
     font-weight   : var(--weight-semibold);
 }
 
-.status-pending    { background: #FEF3C7; color: #92400E; }
-.status-confirmed  { background: #DBEAFE; color: #1E40AF; }
-.status-processing { background: #EDE9FE; color: #5B21B6; }
-.status-shipped    { background: #FEF9C3; color: #854D0E; }
-.status-delivered  { background: #D1FAE5; color: #065F46; }
-.status-cancelled  { background: #FEE2E2; color: #991B1B; }
-.status-refunded   { background: #F3F4F6; color: #374151; }
+.status-pending         { background: #FEF3C7; color: #92400E; }
+.status-confirmed       { background: #DBEAFE; color: #1E40AF; }
+.status-processing      { background: #EDE9FE; color: #5B21B6; }
+.status-shipped         { background: #FEF9C3; color: #854D0E; }
+.status-delivered       { background: #D1FAE5; color: #065F46; }
+.status-cancelled       { background: #FEE2E2; color: #991B1B; }
+.status-refunded        { background: #F3F4F6; color: #374151; }
+.status-expired         { background: #FDECEA; color: #C0392B; }
+.status-payment_failed  { background: #FEE2E2; color: #7F1D1D; }
+
+.badge-expired { background: #FDECEA; color: #C0392B; }
 
 
 /* ══════════════════════════════════════════════════════════
