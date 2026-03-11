@@ -13,3 +13,4 @@ from .payment              import Payment
 from .review               import Review
 from .banner               import Banner
 from .shipping_rule        import ShippingRule
+from .webhook_event        import WebhookEvent

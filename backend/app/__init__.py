@@ -24,7 +24,7 @@ def create_app():
         User, PasswordResetToken, Address, Category,
         Product, ProductVariant, ProductImage,
         Cart, CartItem, Order, OrderItem,
-        Payment, Review, Banner, ShippingRule
+        Payment, Review, Banner, ShippingRule, WebhookEvent
     )
 
     # Register blueprints

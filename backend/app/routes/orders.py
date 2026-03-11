@@ -285,7 +285,7 @@ def place_order():
             status              = "pending",
             notes               = (data.get("notes") or "").strip() or None,
             # Payment must be completed within 15 minutes (UTC)
-            payment_expires_at  = datetime.utcnow() + timedelta(minutes=2),
+            payment_expires_at  = datetime.utcnow() + timedelta(minutes=15),
         )
         db.session.add(order)
         db.session.flush()   # gets order.id before final commit

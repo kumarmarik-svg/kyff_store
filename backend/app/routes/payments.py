@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 from ..extensions import db
-from ..models import Order, Payment, Cart, CartItem, OrderItem, ProductVariant
+from ..models import Order, Payment, Cart, CartItem, OrderItem, ProductVariant, WebhookEvent
 import hmac
 import hashlib
 import os
@@ -251,38 +251,66 @@ def verify_payment():
 @payments_bp.route("/webhook", methods=["POST"])
 def razorpay_webhook():
     """
-    Handles Razorpay webhook events.
-    Called directly by Razorpay servers — NOT by frontend.
-    No JWT auth — Razorpay doesn't send tokens.
-    Always returns 200 so Razorpay doesn't retry.
-    """
-    payload   = request.get_data(as_text=True)
-    signature = request.headers.get("X-Razorpay-Signature", "")
+    Razorpay webhook — backup confirmation source.
 
+    This endpoint acts as a safety net: if the frontend's verify_payment()
+    call succeeds first, the webhook is a no-op (payment already 'success').
+    If the frontend call never arrives (tab closed, network drop), the
+    webhook ensures the order and payment are updated correctly.
+
+    Security: signature is verified using RAZORPAY_WEBHOOK_SECRET.
+    Auth: none — Razorpay calls this directly, not the frontend.
+
+    Handled events:
+        payment.captured  → order confirmed, payment success
+        payment.failed    → order payment_failed, payment failed
+        refund.processed  → order refunded, payment refunded
+
+    Safety rules:
+        - NEVER creates a new Payment row.
+        - Ignores events when payment is already 'success'.
+        - Does NOT restore stock on failure (user may retry).
+        - Always returns 200 for valid requests so Razorpay stops retrying.
+    """
+    # ── Signature verification ─────────────────────────────────
+    payload        = request.get_data()          # raw bytes — do NOT decode before HMAC
+    signature      = request.headers.get("X-Razorpay-Signature", "")
     webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").encode("utf-8")
-    expected       = hmac.new(
-        webhook_secret,
-        payload.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
+
+    expected = hmac.new(webhook_secret, payload, hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(expected, signature):
-        return jsonify({"status": "invalid signature"}), 200
+        # Return 400 so monitoring tools can alert on tampered requests.
+        return jsonify({"error": "Invalid webhook signature"}), 400
 
     event      = request.get_json(force=True)
+    event_id   = event.get("id")          # Razorpay's globally unique event ID
     event_type = event.get("event")
+
+    # ── Idempotency check ─────────────────────────────────────
+    # Razorpay retries unacknowledged webhooks.  If we already processed
+    # this event_id, skip all DB work and return 200 immediately so
+    # Razorpay stops retrying.
+    if event_id:
+        existing = WebhookEvent.query.filter_by(event_id=event_id).first()
+        if existing:
+            return jsonify({"status": "duplicate ignored"}), 200
 
     # ── payment.captured ──────────────────────────────────────
     if event_type == "payment.captured":
-        payment_entity = event["payload"]["payment"]["entity"]
-        rz_order_id    = payment_entity.get("order_id")
-        rz_payment_id  = payment_entity.get("id")
+        try:
+            payment_entity = event["payload"]["payment"]["entity"]
+            rz_order_id    = payment_entity.get("order_id")
+            rz_payment_id  = payment_entity.get("id")
 
-        payment = Payment.query.filter_by(
-            gateway_order_id=rz_order_id
-        ).first()
+            payment = Payment.query.filter_by(
+                gateway_order_id=rz_order_id
+            ).first()
 
-        if payment and not payment.is_successful():
+            if not payment or payment.is_successful():
+                # Already handled by verify_payment() or unknown order — ignore.
+                return jsonify({"status": "ignored"}), 200
+
             order = payment.order
             payment.mark_success(
                 transaction_id   = rz_payment_id,
@@ -306,25 +334,74 @@ def razorpay_webhook():
                                 variant.restore_stock(item.quantity)
                     stale.status = "cancelled"
 
+            if event_id:
+                db.session.add(WebhookEvent(event_id=event_id, event_type=event_type))
             db.session.commit()
+
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            db.session.rollback()
 
     # ── payment.failed ────────────────────────────────────────
     elif event_type == "payment.failed":
-        payment_entity = event["payload"]["payment"]["entity"]
-        rz_order_id    = payment_entity.get("order_id")
+        try:
+            payment_entity = event["payload"]["payment"]["entity"]
+            rz_order_id    = payment_entity.get("order_id")
 
-        payment = Payment.query.filter_by(
-            gateway_order_id=rz_order_id
-        ).first()
+            payment = Payment.query.filter_by(
+                gateway_order_id=rz_order_id
+            ).first()
 
-        if payment and not payment.is_successful():
+            if not payment or payment.is_successful():
+                return jsonify({"status": "ignored"}), 200
+
             payment.mark_failed(gateway_response=event)
             order = payment.order
             if order and order.status in ("pending", "payment_failed"):
                 # Mark failed but do NOT restore stock — user may retry.
-                # Stock is only released on expiry or cancellation.
+                # Stock is only released on expiry or explicit cancellation.
                 order.status = "payment_failed"
+
+            if event_id:
+                db.session.add(WebhookEvent(event_id=event_id, event_type=event_type))
             db.session.commit()
+
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            db.session.rollback()
+
+    # ── refund.processed ──────────────────────────────────────
+    elif event_type == "refund.processed":
+        try:
+            refund_entity = event["payload"]["refund"]["entity"]
+            rz_order_id   = refund_entity.get("order_id") or \
+                            event["payload"].get("payment", {}).get("entity", {}).get("order_id")
+
+            payment = Payment.query.filter_by(
+                gateway_order_id=rz_order_id
+            ).first()
+
+            if not payment:
+                return jsonify({"status": "ignored"}), 200
+
+            # Store refund details inside the existing payment row —
+            # never create a new row.
+            payment.status           = "refunded"
+            payment.gateway_response = event   # includes refund_id and amount
+            order = payment.order
+            if order:
+                order.status = "refunded"
+
+            if event_id:
+                db.session.add(WebhookEvent(event_id=event_id, event_type=event_type))
+            db.session.commit()
+
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            db.session.rollback()
 
     return jsonify({"status": "ok"}), 200
 

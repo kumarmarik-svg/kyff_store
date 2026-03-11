@@ -79,7 +79,7 @@ def init_scheduler(app):
         func             = _expire_stale_orders,
         args             = [app],
         trigger          = "interval",
-        minutes          = 2,
+        minutes          = 5,
         id               = "expire_stale_orders",
         replace_existing = True,
     )
