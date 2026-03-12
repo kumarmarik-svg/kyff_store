@@ -5,7 +5,26 @@
 
 <div class="admin-page-header">
     <h1>Dashboard</h1>
-    <div style="font-size:var(--text-sm); color:var(--color-text-muted)" id="last-updated"></div>
+    <div style="display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap">
+        <div id="date-quick-btns" style="display:flex; gap:var(--space-2); flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm date-quick" data-range="today">Today</button>
+            <button class="btn btn-ghost btn-sm date-quick" data-range="week">This Week</button>
+            <button class="btn btn-sm date-quick active-range" data-range="month">This Month</button>
+            <button class="btn btn-ghost btn-sm date-quick" data-range="last_month">Last Month</button>
+            <button class="btn btn-ghost btn-sm date-quick" data-range="last30">Last 30 Days</button>
+            <button class="btn btn-ghost btn-sm date-quick" data-range="custom">Custom</button>
+        </div>
+        <div id="custom-range-inputs" style="display:none; align-items:center; gap:var(--space-2)">
+            <input type="date" id="custom-from" class="form-input"
+                   style="padding:4px 8px; font-size:var(--text-sm)">
+            <span style="color:var(--color-text-muted); font-size:var(--text-sm)">to</span>
+            <input type="date" id="custom-to" class="form-input"
+                   style="padding:4px 8px; font-size:var(--text-sm)">
+            <button class="btn btn-primary btn-sm" onclick="applyCustomRange()">Apply</button>
+        </div>
+        <div id="range-label"
+             style="font-size:var(--text-sm); color:var(--color-text-muted); white-space:nowrap"></div>
+    </div>
 </div>
 
 <!-- Loading -->
@@ -20,17 +39,14 @@
         <div class="stat-card">
             <div class="stat-label">Total Orders</div>
             <div class="stat-value" id="stat-orders">—</div>
-            <div class="stat-sub" id="stat-orders-today"></div>
         </div>
         <div class="stat-card accent">
-            <div class="stat-label">Revenue (30d)</div>
+            <div class="stat-label">Revenue</div>
             <div class="stat-value" id="stat-revenue">—</div>
-            <div class="stat-sub" id="stat-revenue-7d"></div>
         </div>
         <div class="stat-card success">
             <div class="stat-label">Total Customers</div>
             <div class="stat-value" id="stat-users">—</div>
-            <div class="stat-sub" id="stat-users-new"></div>
         </div>
         <div class="stat-card warning">
             <div class="stat-label">Pending Reviews</div>
@@ -58,7 +74,7 @@
         <!-- Top Products -->
         <div class="card">
             <div class="card-header">
-                <h3>Top Products (30d)</h3>
+                <h3>Top Products</h3>
                 <a href="/admin/products" class="btn btn-ghost btn-sm">View All</a>
             </div>
             <div class="card-body" style="padding:0">
@@ -102,54 +118,155 @@
 
 
 {% block extra_js %}
+<style>
+.active-range {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+}
+.active-range:hover {
+    background: var(--color-primary-dark);
+    border-color: var(--color-primary-dark);
+}
+</style>
 <script>
-document.addEventListener('DOMContentLoaded', loadDashboard);
+// ── Date range state ─────────────────────────────────────────────
+let currentRange = 'month';
 
-async function loadDashboard() {
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function fmtISO(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function fmtLabel(from, to) {
+    const opts = { month: 'short', day: 'numeric' };
+    const f = new Date(from + 'T00:00:00').toLocaleDateString('en-IN', opts);
+    const t = new Date(to   + 'T00:00:00').toLocaleDateString('en-IN', opts);
+    return f === t ? f : `${f} – ${t}`;
+}
+
+function getRangeDates(range) {
+    const now   = new Date();
+    const today = fmtISO(now);
+
+    if (range === 'today') {
+        return { from: today, to: today };
+    }
+    if (range === 'week') {
+        const mon = new Date(now);
+        const day = now.getDay();
+        mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+        return { from: fmtISO(mon), to: today };
+    }
+    if (range === 'month') {
+        const from = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
+        return { from, to: today };
+    }
+    if (range === 'last_month') {
+        const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const last  = new Date(now.getFullYear(), now.getMonth(), 0);
+        return { from: fmtISO(first), to: fmtISO(last) };
+    }
+    if (range === 'last30') {
+        const from = new Date(now);
+        from.setDate(now.getDate() - 29);
+        return { from: fmtISO(from), to: today };
+    }
+    return null;
+}
+
+// ── Button active state ──────────────────────────────────────────
+function setActiveBtn(range) {
+    document.querySelectorAll('.date-quick').forEach(b => {
+        if (b.dataset.range === range) {
+            b.className = 'btn btn-sm date-quick active-range';
+        } else {
+            b.className = 'btn btn-ghost btn-sm date-quick';
+        }
+    });
+    document.getElementById('custom-range-inputs').style.display =
+        range === 'custom' ? 'flex' : 'none';
+}
+
+// ── Wire up quick buttons ────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.date-quick').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const range = btn.dataset.range;
+            if (range === 'custom') {
+                setActiveBtn('custom');
+                return;
+            }
+            currentRange = range;
+            setActiveBtn(range);
+            const dates = getRangeDates(range);
+            document.getElementById('range-label').textContent =
+                fmtLabel(dates.from, dates.to);
+            loadDashboard(dates.from, dates.to);
+        });
+    });
+
+    // Load default: This Month
+    const defaults = getRangeDates('month');
+    document.getElementById('range-label').textContent =
+        fmtLabel(defaults.from, defaults.to);
+    loadDashboard(defaults.from, defaults.to);
+});
+
+function applyCustomRange() {
+    const from = document.getElementById('custom-from').value;
+    const to   = document.getElementById('custom-to').value;
+    if (!from || !to) { alert('Please select both dates.'); return; }
+    if (from > to)    { alert('Start date must be before end date.'); return; }
+    currentRange = 'custom';
+    document.getElementById('range-label').textContent = fmtLabel(from, to);
+    loadDashboard(from, to);
+}
+
+// ── Main load function ───────────────────────────────────────────
+async function loadDashboard(dateFrom, dateTo) {
+    document.getElementById('dash-loading').style.display = 'flex';
+    document.getElementById('dash-content').style.display = 'none';
     try {
-        const res = await API.get('/api/admin/dashboard');
+        let url = '/api/admin/dashboard';
+        if (dateFrom && dateTo) {
+            url += `?date_from=${dateFrom}&date_to=${dateTo}`;
+        }
+        const res = await API.get(url);
         const d   = res.data;
 
-        document.getElementById('dash-loading').style.display  = 'none';
-        document.getElementById('dash-content').style.display  = 'block';
-        document.getElementById('last-updated').textContent    =
-            'Last updated: ' + new Date().toLocaleTimeString('en-IN');
+        document.getElementById('dash-loading').style.display = 'none';
+        document.getElementById('dash-content').style.display = 'block';
 
-        // Stats
+        // ── Stats ────────────────────────────────────────────
         document.getElementById('stat-orders').textContent =
-            d.orders?.total || 0;
-        document.getElementById('stat-orders-today').textContent =
-            `+${d.orders?.today || 0} today`;
-        document.getElementById('stat-orders-today').className =
-            'stat-sub positive';
-
+            (d.orders?.total ?? 0).toLocaleString('en-IN');
         document.getElementById('stat-revenue').textContent =
-            `₹${parseFloat(d.revenue?.last_30_days || 0).toLocaleString('en-IN')}`;
-        document.getElementById('stat-revenue-7d').textContent =
-            `₹${parseFloat(d.revenue?.last_7_days || 0).toLocaleString('en-IN')} last 7d`;
-
+            '₹' + parseFloat(d.revenue?.total || 0).toLocaleString('en-IN');
         document.getElementById('stat-users').textContent =
-            d.users?.total || 0;
-        document.getElementById('stat-users-new').textContent =
-            `+${d.users?.new_last_7_days || 0} this week`;
-        document.getElementById('stat-users-new').className = 'stat-sub positive';
-
+            (d.users?.total ?? 0).toLocaleString('en-IN');
         document.getElementById('stat-reviews').textContent =
-            d.pending_reviews || 0;
+            d.pending_reviews ?? 0;
 
-        // Order Status Breakdown
+        // ── Order Status Breakdown ───────────────────────────
         const statusEl = document.getElementById('status-breakdown');
         const statuses = d.orders?.by_status || {};
         const statusColors = {
-            pending:'#F4A261', confirmed:'#4361EE',
-            processing:'#7209B7', shipped:'#F9C74F',
-            delivered:'#40916C', cancelled:'#E63946'
+            pending:    '#F4A261',
+            confirmed:  '#4361EE',
+            processing: '#7209B7',
+            shipped:    '#F9C74F',
+            delivered:  '#40916C',
+            cancelled:  '#E63946',
+            expired:    '#9E9E9E',
+            refunded:   '#FF6B9D'
         };
 
         statusEl.innerHTML = Object.entries(statuses).map(([status, count]) => `
             <div style="text-align:center; padding:var(--space-4);
                         background:var(--color-bg-light); border-radius:var(--radius-md);
-                        border-left:3px solid ${statusColors[status]||'var(--color-border)'}">
+                        border-left:3px solid ${statusColors[status] || 'var(--color-border)'}">
                 <div style="font-size:var(--text-2xl); font-weight:700;
                             color:var(--color-text)">${count}</div>
                 <div style="font-size:var(--text-xs); color:var(--color-text-muted);
@@ -159,7 +276,7 @@ async function loadDashboard() {
             </div>
         `).join('');
 
-        // Top Products
+        // ── Top Products ─────────────────────────────────────
         const topEl = document.getElementById('top-products');
         const tops  = d.top_products || [];
         if (tops.length === 0) {
@@ -179,7 +296,7 @@ async function loadDashboard() {
                     <div style="flex:1; min-width:0">
                         <div style="font-size:var(--text-sm); font-weight:var(--weight-medium);
                                     white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
-                            ${p.product_name}
+                            ${p.name}
                         </div>
                         <div style="font-size:var(--text-xs); color:var(--color-text-muted)">
                             ${p.total_sold} units sold
@@ -187,30 +304,30 @@ async function loadDashboard() {
                     </div>
                     <div style="font-weight:var(--weight-semibold); font-size:var(--text-sm);
                                 flex-shrink:0; color:var(--color-primary-dark)">
-                        ₹${parseFloat(p.revenue||0).toLocaleString('en-IN')}
+                        ₹${parseFloat(p.total_revenue||0).toLocaleString('en-IN')}
                     </div>
                 </div>
             `).join('');
         }
 
-        // Recent Orders
+        // ── Recent Orders ────────────────────────────────────
         const tbody = document.getElementById('recent-orders-body');
         const orders = d.recent_orders || [];
         if (orders.length === 0) {
             tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;
                 color:var(--color-text-muted); padding:var(--space-8)">No orders yet</td></tr>`;
         } else {
-            tbody.innerHTML = orders.slice(0,8).map(o => `
+            tbody.innerHTML = orders.slice(0, 8).map(o => `
                 <tr>
                     <td><strong>${o.order_number}</strong></td>
-                    <td>${o.user?.name || 'Guest'}</td>
+                    <td>${o.customer_name || 'Guest'}</td>
                     <td>${formatDate(o.created_at)}</td>
                     <td><strong>₹${parseFloat(o.total).toFixed(2)}</strong></td>
                     <td><span class="status-badge status-${o.status}">
                         ${capitalize(o.status)}
                     </span></td>
                     <td>
-                        <a href="/admin/orders?order=${o.order_number}"
+                        <a href="/admin/orders/${o.order_number}"
                            class="btn btn-ghost btn-sm">
                             View
                         </a>
@@ -225,7 +342,7 @@ async function loadDashboard() {
                 <div class="empty-state-icon">⚠️</div>
                 <h3>Failed to load dashboard</h3>
                 <p>Check your connection and try again.</p>
-                <button onclick="loadDashboard()" class="btn btn-primary">Retry</button>
+                <button onclick="location.reload()" class="btn btn-primary">Retry</button>
             </div>
         `;
     }

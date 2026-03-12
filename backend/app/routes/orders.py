@@ -566,6 +566,12 @@ def cancel_order(order_number):
     if order.user_id != user_id:
         return error("You do not have access to this order", 403)
 
+    CANCELLABLE = ['pending', 'confirmed', 'processing']
+    if order.status not in CANCELLABLE:
+        return error(
+            f"Order cannot be cancelled. Current status: {order.status}"
+        )
+
     # cancel() raises ValueError if not cancellable
     try:
         order.cancel()

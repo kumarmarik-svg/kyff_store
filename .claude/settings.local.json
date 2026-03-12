@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /c/Projects/kyff_store/backend && source venv/Scripts/activate && echo \"Activated successfully\" && python --version)"
+    ]
+  }
+}

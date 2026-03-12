@@ -1,0 +1,308 @@
+{% extends "admin/base.html" %}
+{% set active_page = "orders" %}
+
+{% block content %}
+
+<div class="admin-page-header">
+    <div style="display:flex; align-items:center; gap:var(--space-3)">
+        <a href="/admin/orders" class="btn btn-ghost btn-sm">
+            <i class="ph ph-arrow-left"></i> Back
+        </a>
+        <h1 id="page-order-num">Order</h1>
+    </div>
+</div>
+
+<!-- Loading -->
+<div id="detail-loading" class="loading-overlay">
+    <div class="spinner spinner-lg"></div>
+</div>
+
+<div id="detail-content" style="display:none">
+
+    <div style="display:grid; grid-template-columns:2fr 1fr; gap:var(--space-6);
+                align-items:start">
+
+        <!-- ── Left column ── -->
+        <div style="display:flex; flex-direction:column; gap:var(--space-6)">
+
+            <!-- Order Items -->
+            <div class="card">
+                <div class="card-header"><h3>Items</h3></div>
+                <div style="overflow-x:auto">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Variant</th>
+                                <th style="text-align:right">Unit Price</th>
+                                <th style="text-align:right">Qty</th>
+                                <th style="text-align:right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-items"></tbody>
+                    </table>
+                </div>
+                <div class="card-body"
+                     style="border-top:1px solid var(--color-border)">
+                    <div id="detail-totals"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ── Right column ── -->
+        <div style="display:flex; flex-direction:column; gap:var(--space-6)">
+
+            <!-- Order Info -->
+            <div class="card">
+                <div class="card-header"><h3>Order Info</h3></div>
+                <div class="card-body">
+                    <dl id="detail-info"
+                        style="display:grid; grid-template-columns:auto 1fr;
+                               gap:var(--space-2) var(--space-5); margin:0">
+                    </dl>
+                </div>
+            </div>
+
+            <!-- Shipping Address -->
+            <div class="card">
+                <div class="card-header"><h3>Shipping Address</h3></div>
+                <div class="card-body">
+                    <address id="detail-address"
+                             style="font-style:normal; font-size:var(--text-sm);
+                                    line-height:1.9; color:var(--color-text)">
+                    </address>
+                </div>
+            </div>
+
+            <!-- Status Panel (rendered by JS based on current status) -->
+            <div id="status-panel"></div>
+
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+const ORDER_NUMBER = window.location.pathname.split('/').pop();
+let currentStatus = '';
+
+document.addEventListener('DOMContentLoaded', loadOrderDetail);
+
+async function loadOrderDetail() {
+    try {
+        const res = await API.get(`/api/admin/orders/${ORDER_NUMBER}`);
+        const o   = res.data.order;
+
+        document.getElementById('detail-loading').style.display = 'none';
+        document.getElementById('detail-content').style.display = 'block';
+
+        document.getElementById('page-order-num').textContent = o.order_number;
+
+        currentStatus = o.status;
+
+        // ── Order Info ────────────────────────────────────────
+        document.getElementById('detail-info').innerHTML = `
+            <dt style="color:var(--color-text-muted); font-size:var(--text-sm)">Order #</dt>
+            <dd style="font-weight:var(--weight-semibold); font-size:var(--text-sm);
+                       margin:0">${o.order_number}</dd>
+
+            <dt style="color:var(--color-text-muted); font-size:var(--text-sm)">Date</dt>
+            <dd style="font-size:var(--text-sm); margin:0">${formatDate(o.created_at)}</dd>
+
+            <dt style="color:var(--color-text-muted); font-size:var(--text-sm)">Status</dt>
+            <dd style="margin:0">
+                <span class="status-badge status-${o.status}">${capitalize(o.status)}</span>
+            </dd>
+
+            <dt style="color:var(--color-text-muted); font-size:var(--text-sm)">Customer</dt>
+            <dd style="font-size:var(--text-sm); margin:0">
+                ${o.shipping_name || 'Guest'}
+            </dd>
+
+            ${o.notes ? `
+            <dt style="color:var(--color-text-muted); font-size:var(--text-sm)">Notes</dt>
+            <dd style="font-size:var(--text-sm); margin:0; color:var(--color-text-muted)">
+                ${o.notes}
+            </dd>` : ''}
+        `;
+
+        // ── Shipping Address ──────────────────────────────────
+        const a = o;
+        document.getElementById('detail-address').innerHTML = `
+            <strong>${a.shipping_name || ''}</strong><br>
+            ${a.shipping_phone ? a.shipping_phone + '<br>' : ''}
+            ${a.shipping_line1 || ''}<br>
+            ${a.shipping_line2 ? a.shipping_line2 + '<br>' : ''}
+            ${a.shipping_city || ''}${a.shipping_state ? ', ' + a.shipping_state : ''}
+            ${a.shipping_pincode ? ' – ' + a.shipping_pincode : ''}
+        `;
+
+        // ── Items ─────────────────────────────────────────────
+        const items = o.items || [];
+        document.getElementById('detail-items').innerHTML = items.length === 0
+            ? `<tr><td colspan="5" style="text-align:center; padding:var(--space-6);
+                   color:var(--color-text-muted)">No items</td></tr>`
+            : items.map(item => `
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:var(--space-3)">
+                            ${item.image_url
+                                ? `<img src="${item.image_url}" alt=""
+                                        style="width:36px; height:36px; object-fit:cover;
+                                               border-radius:var(--radius-sm); flex-shrink:0">`
+                                : ''}
+                            <span style="font-size:var(--text-sm)">${item.product_name}</span>
+                        </div>
+                    </td>
+                    <td style="color:var(--color-text-muted); font-size:var(--text-sm)">
+                        ${item.variant_label || '—'}
+                    </td>
+                    <td style="text-align:right; font-size:var(--text-sm)">
+                        ₹${parseFloat(item.unit_price).toFixed(2)}
+                    </td>
+                    <td style="text-align:right; font-size:var(--text-sm)">
+                        ${item.quantity}
+                    </td>
+                    <td style="text-align:right; font-weight:var(--weight-semibold);
+                               font-size:var(--text-sm)">
+                        ₹${parseFloat(item.line_total).toFixed(2)}
+                    </td>
+                </tr>
+            `).join('');
+
+        // ── Totals ────────────────────────────────────────────
+        const discount = parseFloat(o.discount_amount || 0);
+        document.getElementById('detail-totals').innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:var(--space-2);
+                        max-width:260px; margin-left:auto">
+                <div style="display:flex; justify-content:space-between;
+                            font-size:var(--text-sm)">
+                    <span style="color:var(--color-text-muted)">Subtotal</span>
+                    <span>₹${parseFloat(o.subtotal).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;
+                            font-size:var(--text-sm)">
+                    <span style="color:var(--color-text-muted)">Shipping</span>
+                    <span>₹${parseFloat(o.shipping_charge).toFixed(2)}</span>
+                </div>
+                ${discount > 0 ? `
+                <div style="display:flex; justify-content:space-between;
+                            font-size:var(--text-sm)">
+                    <span style="color:var(--color-text-muted)">Discount</span>
+                    <span style="color:var(--color-success)">
+                        −₹${discount.toFixed(2)}
+                    </span>
+                </div>` : ''}
+                <div style="display:flex; justify-content:space-between;
+                            font-size:var(--text-base); font-weight:var(--weight-bold);
+                            padding-top:var(--space-2);
+                            border-top:2px solid var(--color-border)">
+                    <span>Grand Total</span>
+                    <span>₹${parseFloat(o.total).toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+
+        // ── Status panel ──────────────────────────────────────
+        renderStatusPanel(o.status);
+
+    } catch (e) {
+        document.getElementById('detail-loading').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">⚠️</div>
+                <h3>Order not found</h3>
+                <p>${ORDER_NUMBER}</p>
+                <a href="/admin/orders" class="btn btn-primary">Back to Orders</a>
+            </div>
+        `;
+    }
+}
+
+const STATUS_NEXT   = { confirmed: 'processing', processing: 'shipped', shipped: 'delivered' };
+const STATUS_LOCKED = new Set(['pending', 'payment_failed', 'cancelled', 'refunded', 'expired']);
+
+function renderStatusPanel(status) {
+    const panel = document.getElementById('status-panel');
+
+    if (STATUS_LOCKED.has(status)) {
+        panel.innerHTML = `
+            <div class="card">
+                <div class="card-body" style="background:var(--color-bg-light)">
+                    <div style="display:flex; align-items:center; gap:var(--space-3);
+                                margin-bottom:var(--space-2)">
+                        <i class="ph ph-lock" style="font-size:1.2rem;
+                           color:var(--color-text-muted)"></i>
+                        <span class="status-badge status-${status}">
+                            ${capitalize(status)}
+                        </span>
+                    </div>
+                    <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin:0">
+                        This order cannot be updated.
+                    </p>
+                </div>
+            </div>`;
+
+    } else if (status === 'delivered') {
+        panel.innerHTML = `
+            <div class="card">
+                <div class="card-body" style="background:#f0fdf4">
+                    <div style="display:flex; align-items:center; gap:var(--space-3);
+                                margin-bottom:var(--space-2)">
+                        <i class="ph ph-check-circle" style="font-size:1.2rem;
+                           color:var(--color-success)"></i>
+                        <strong style="font-size:var(--text-sm)">Order Delivered</strong>
+                    </div>
+                    <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin:0">
+                        This order has been completed.
+                    </p>
+                </div>
+            </div>`;
+
+    } else {
+        const nextStatus = STATUS_NEXT[status];
+        panel.innerHTML = `
+            <div class="card">
+                <div class="card-header"><h3>Update Status</h3></div>
+                <div class="card-body">
+                    <p style="font-size:var(--text-sm); color:var(--color-text-muted);
+                              margin-bottom:var(--space-3)">
+                        Currently:
+                        <span class="status-badge status-${status}">
+                            ${capitalize(status)}
+                        </span>
+                    </p>
+                    <div class="form-group" style="margin-bottom:var(--space-4)">
+                        <label class="form-label">New Status</label>
+                        <select class="form-select" id="detail-status-select">
+                            <option value="${nextStatus}">${capitalize(nextStatus)}</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" style="width:100%"
+                            onclick="saveStatus()">
+                        Save Status
+                    </button>
+                </div>
+            </div>`;
+    }
+}
+
+async function saveStatus() {
+    const sel = document.getElementById('detail-status-select');
+    if (!sel) return;
+    const newStatus = sel.value;
+    try {
+        await API.patch(`/api/admin/orders/${ORDER_NUMBER}/status`,
+                        { status: newStatus });
+        showToast('Status updated to ' + capitalize(newStatus) + ' ✅');
+        location.reload();
+    } catch (err) {
+        showToast(err.message || 'Update failed', 'error');
+    }
+}
+</script>
+{% endblock %}

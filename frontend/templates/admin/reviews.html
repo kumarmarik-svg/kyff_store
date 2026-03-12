@@ -63,16 +63,19 @@ async function loadReviews() {
         const tbody   = document.getElementById('reviews-tbody');
 
         if (reviews.length === 0) {
+            const emptyMsg = reviewFilter === 'all' ? 'No reviews found'
+                           : reviewFilter === 'pending'  ? 'No pending reviews'
+                           : 'No approved reviews';
             tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;
                 color:var(--color-text-muted); padding:var(--space-8)">
-                No ${reviewFilter} reviews</td></tr>`;
+                ${emptyMsg}</td></tr>`;
             return;
         }
 
         tbody.innerHTML = reviews.map(r => `
             <tr>
-                <td style="font-size:var(--text-sm)">${r.product?.name || '—'}</td>
-                <td style="font-size:var(--text-sm)">${r.user?.name || '—'}</td>
+                <td style="font-size:var(--text-sm)">${r.product_name || '—'}</td>
+                <td style="font-size:var(--text-sm)">${r.user_name   || '—'}</td>
                 <td>
                     <span style="color:#F4A261">
                         ${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}
@@ -80,9 +83,26 @@ async function loadReviews() {
                 </td>
                 <td style="max-width:240px">
                     ${r.title ? `<strong style="font-size:var(--text-xs)">${r.title}</strong><br>` : ''}
-                    <span style="font-size:var(--text-xs); color:var(--color-text-muted)">
-                        ${r.body ? r.body.substring(0,100) + (r.body.length > 100 ? '...' : '') : '—'}
-                    </span>
+                    ${r.body ? (() => {
+                        const short = r.body.length > 60;
+                        return `
+                        <span style="font-size:var(--text-xs); color:var(--color-text-muted)">
+                            <span class="rv-short-${r.id}">${r.body.substring(0, 60)}${short ? '...' : ''}</span>
+                            ${short ? `
+                            <a style="color:var(--color-primary); cursor:pointer; white-space:nowrap"
+                               onclick="document.querySelector('.rv-short-${r.id}').style.display='none';
+                                        document.querySelector('.rv-full-${r.id}').style.display='inline';
+                                        this.style.display='none'">
+                                Read more</a>
+                            <span class="rv-full-${r.id}" style="display:none">${r.body}
+                                <a style="color:var(--color-primary); cursor:pointer; white-space:nowrap"
+                                   onclick="document.querySelector('.rv-full-${r.id}').style.display='none';
+                                            document.querySelector('.rv-short-${r.id}').style.display='inline';
+                                            this.parentElement.previousElementSibling.style.display='inline'">
+                                    Show less</a>
+                            </span>` : ''}
+                        </span>`;
+                    })() : '—'}
                 </td>
                 <td style="font-size:var(--text-xs)">${formatDate(r.created_at)}</td>
                 <td>
@@ -116,8 +136,9 @@ async function loadReviews() {
 async function approveReview(id) {
     try {
         await API.patch(`/api/admin/reviews/${id}/approve`, {});
-        showToast('Review approved ✅');
+        showToast('Review approved');
         loadReviews();
+        refreshPendingBadge();
     } catch (err) {
         showToast(err.message || 'Failed', 'error');
     }
@@ -129,9 +150,21 @@ async function deleteReview(id) {
         await API.delete(`/api/admin/reviews/${id}`);
         showToast('Review deleted');
         loadReviews();
+        refreshPendingBadge();
     } catch (err) {
         showToast(err.message || 'Failed', 'error');
     }
+}
+
+async function refreshPendingBadge() {
+    try {
+        const res   = await API.get('/api/admin/reviews?status=pending');
+        const count = res.data?.total ?? 0;
+        const badge = document.getElementById('pending-reviews-count');
+        if (!badge) return;
+        badge.textContent    = count > 0 ? count : '';
+        badge.style.display  = count > 0 ? 'inline-flex' : 'none';
+    } catch (e) {}
 }
 </script>
 {% endblock %}

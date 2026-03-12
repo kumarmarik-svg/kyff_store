@@ -19,6 +19,13 @@ def index():
         page_description = 'Farm-fresh organic foods from Tamil Nadu farmers.')
 
 
+@views_bp.route('/about')
+def about():
+    return render_template('about.html',
+        page_title       = 'Our Story — KYFF',
+        page_description = 'Learn about KYFF — sourcing organic food directly from Tamil Nadu farmers.')
+
+
 @views_bp.route('/products')
 def products():
     return render_template('products.html',
@@ -105,6 +112,13 @@ def admin_dashboard():
 def admin_orders():
     return render_template('admin/orders.html',
         page_title  = 'Orders',
+        active_page = 'orders')
+
+
+@views_bp.route('/admin/orders/<order_number>')
+def admin_order_detail(order_number):
+    return render_template('admin/order_detail.html',
+        page_title  = f'Order {order_number}',
         active_page = 'orders')
 
 

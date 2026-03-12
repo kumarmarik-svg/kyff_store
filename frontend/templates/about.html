@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- ══════════════════════════════════════════════════════════
+     HERO
+     ══════════════════════════════════════════════════════════ -->
+<section style="background: var(--color-primary, #1a3a2a); color: white; padding: 80px 0 64px;">
+    <div class="container" style="text-align: center;">
+        <div style="display: inline-block; background: rgba(255,255,255,0.12); border-radius: 999px; padding: 6px 20px; font-size: 0.85rem; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 20px;">
+            🌾 Tamil Nadu Farmers
+        </div>
+        <h1 style="font-family: 'Playfair Display', serif; font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 700; margin: 0 0 16px;">Our Story</h1>
+        <p style="font-size: 1.15rem; opacity: 0.8; max-width: 520px; margin: 0 auto;">From Tamil Nadu farms to your table</p>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     WHO WE ARE
+     ══════════════════════════════════════════════════════════ -->
+<section style="padding: 64px 0;">
+    <div class="container" style="max-width: 760px;">
+        <h2 style="font-family: 'Playfair Display', serif; font-size: 1.9rem; color: var(--color-primary, #1a3a2a); margin-bottom: 20px;">Who We Are</h2>
+        <p style="font-size: 1.05rem; line-height: 1.8; color: var(--color-text, #2d2d2d);">
+            KYFF (Know Your Food Farm) is a direct-to-consumer organic food store sourcing fresh, natural products
+            from local Tamil Nadu farmers. We believe in transparent sourcing, fair prices for farmers, and
+            pure food for families.
+        </p>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     MISSION CARDS
+     ══════════════════════════════════════════════════════════ -->
+<section style="padding: 0 0 64px; background: #f9f6f1;">
+    <div class="container" style="padding-top: 64px;">
+        <h2 style="font-family: 'Playfair Display', serif; font-size: 1.9rem; color: var(--color-primary, #1a3a2a); margin-bottom: 40px; text-align: center;">Our Mission</h2>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px;">
+
+            <div style="background: white; border-radius: 12px; padding: 32px 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);">
+                <div style="font-size: 2rem; margin-bottom: 16px;">🌾</div>
+                <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--color-primary, #1a3a2a); margin-bottom: 10px;">Direct from Farmers</h3>
+                <p style="font-size: 0.95rem; line-height: 1.7; color: #555;">
+                    We work directly with Tamil Nadu farmers, cutting out middlemen to bring you fresher produce at fair prices.
+                </p>
+            </div>
+
+            <div style="background: white; border-radius: 12px; padding: 32px 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);">
+                <div style="font-size: 2rem; margin-bottom: 16px;">🌿</div>
+                <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--color-primary, #1a3a2a); margin-bottom: 10px;">100% Organic</h3>
+                <p style="font-size: 0.95rem; line-height: 1.7; color: #555;">
+                    All our products are naturally grown without harmful pesticides or chemicals.
+                </p>
+            </div>
+
+            <div style="background: white; border-radius: 12px; padding: 32px 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);">
+                <div style="font-size: 2rem; margin-bottom: 16px;">🤝</div>
+                <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--color-primary, #1a3a2a); margin-bottom: 10px;">Fair Trade</h3>
+                <p style="font-size: 0.95rem; line-height: 1.7; color: #555;">
+                    Farmers receive fair compensation for their hard work, ensuring sustainable livelihoods.
+                </p>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     WHY CHOOSE KYFF
+     ══════════════════════════════════════════════════════════ -->
+<section style="padding: 64px 0;">
+    <div class="container" style="max-width: 680px;">
+        <h2 style="font-family: 'Playfair Display', serif; font-size: 1.9rem; color: var(--color-primary, #1a3a2a); margin-bottom: 32px;">Why Choose KYFF</h2>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 16px;">
+            <li style="display: flex; align-items: flex-start; gap: 12px; font-size: 1rem; line-height: 1.6; color: #2d2d2d;">
+                <span style="color: #2e7d32; font-size: 1.1rem; flex-shrink: 0; margin-top: 2px;">✅</span>
+                Sourced directly from local Tamil Nadu farmers
+            </li>
+            <li style="display: flex; align-items: flex-start; gap: 12px; font-size: 1rem; line-height: 1.6; color: #2d2d2d;">
+                <span style="color: #2e7d32; font-size: 1.1rem; flex-shrink: 0; margin-top: 2px;">✅</span>
+                No artificial preservatives or additives
+            </li>
+            <li style="display: flex; align-items: flex-start; gap: 12px; font-size: 1rem; line-height: 1.6; color: #2d2d2d;">
+                <span style="color: #2e7d32; font-size: 1.1rem; flex-shrink: 0; margin-top: 2px;">✅</span>
+                Traditional varieties — millets, cold-pressed oils, spices
+            </li>
+            <li style="display: flex; align-items: flex-start; gap: 12px; font-size: 1rem; line-height: 1.6; color: #2d2d2d;">
+                <span style="color: #2e7d32; font-size: 1.1rem; flex-shrink: 0; margin-top: 2px;">✅</span>
+                Supporting rural farming communities
+            </li>
+            <li style="display: flex; align-items: flex-start; gap: 12px; font-size: 1rem; line-height: 1.6; color: #2d2d2d;">
+                <span style="color: #2e7d32; font-size: 1.1rem; flex-shrink: 0; margin-top: 2px;">✅</span>
+                Fresh stock — ordered and delivered within days
+            </li>
+        </ul>
+    </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     CTA
+     ══════════════════════════════════════════════════════════ -->
+<section style="background: var(--color-primary, #1a3a2a); color: white; padding: 72px 0; text-align: center;">
+    <div class="container">
+        <h2 style="font-family: 'Playfair Display', serif; font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 700; margin: 0 0 14px;">Taste the Difference</h2>
+        <p style="font-size: 1.05rem; opacity: 0.8; margin: 0 0 32px;">Shop our full range of organic products</p>
+        <a href="/products" class="btn btn-accent btn-lg">Shop Now</a>
+    </div>
+</section>
+
+{% endblock %}

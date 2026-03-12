@@ -15,7 +15,7 @@
     <input type="search" class="form-input" id="product-search"
            placeholder="Search products..."
            style="max-width:360px"
-           oninput="debounce(loadProducts,400)()">
+           oninput="debounce(resetAndLoad,400)()">
 </div>
 
 <!-- Table -->
@@ -328,6 +328,8 @@ let currentPage      = 1;
 let categories       = [];
 let pendingImages    = []; // Files queued for upload after save
 
+function resetAndLoad() { currentPage = 1; loadProducts(); }
+
 
 // ── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -370,7 +372,7 @@ function populateCategorySelect() {
 async function loadProducts() {
     const search = document.getElementById('product-search').value.trim();
     const params = new URLSearchParams({ page: currentPage, per_page: 15 });
-    if (search) params.set('q', search);
+    if (search) params.set('search', search);
 
     try {
         const res      = await API.get(`/api/admin/products?${params}`);
@@ -413,7 +415,9 @@ async function loadProducts() {
                         ${p.is_active ? 'Active' : 'Inactive'}
                     </span>
                     ${p.is_featured ? `<span class="badge badge-primary"
-                        style="margin-left:4px">⭐</span>` : ''}
+                        style="margin-left:4px; cursor:pointer"
+                        title="Featured on homepage — click to toggle"
+                        onclick="toggleFeatured(${p.id})">⭐</span>` : ''}
                 </td>
                 <td>
                     <div class="admin-table-actions">
@@ -791,6 +795,17 @@ async function deleteProduct(productId, name) {
         loadProducts();
     } catch (err) {
         showToast(err.message || 'Failed', 'error');
+    }
+}
+
+
+// ── Toggle Featured ────────────────────────────────────────
+async function toggleFeatured(productId) {
+    try {
+        await API.patch(`/api/admin/products/${productId}/toggle-featured`, {});
+        loadProducts();
+    } catch (err) {
+        showToast(err.message || 'Failed to toggle featured', 'error');
     }
 }
 

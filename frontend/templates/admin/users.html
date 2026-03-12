@@ -52,7 +52,7 @@ function debounce(fn, delay) {
 async function loadUsers() {
     const search = document.getElementById('user-search').value.trim();
     const params = new URLSearchParams();
-    if (search) params.set('q', search);
+    if (search) params.set('search', search);
 
     try {
         const res   = await API.get(`/api/admin/users?${params}`);

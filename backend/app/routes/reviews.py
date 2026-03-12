@@ -69,8 +69,8 @@ def add_review():
 
     product_id = data.get("product_id")
     rating     = data.get("rating")
-    title      = data.get("title",  "").strip() or None
-    body       = data.get("body",   "").strip() or None
+    title      = (data.get("title") or "").strip() or None
+    body       = (data.get("body")  or "").strip() or None
 
     # ── Validate ──────────────────────────────────────────────
     if not product_id:

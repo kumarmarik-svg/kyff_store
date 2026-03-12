@@ -597,7 +597,7 @@ async function loadReviews(productId) {
                 <div class="review-card">
                     <div class="review-header">
                         <div>
-                            <div class="reviewer-name">${r.user?.name || 'Customer'}</div>
+                            <div class="reviewer-name">${r.user_name || 'Customer'}</div>
                             <div class="stars">${renderStars(r.rating)}</div>
                         </div>
                         <div class="review-date">${formatDate(r.created_at)}</div>
@@ -660,7 +660,7 @@ async function submitReview() {
         });
 
         document.getElementById('review-form-section').style.display = 'none';
-        showToast('Review submitted! It will appear after approval. ✅');
+        showToast('Review submitted! It will appear after approval.');
         loadReviews(product.id);
     } catch (err) {
         showToast(err.message || 'Failed to submit review', 'error');

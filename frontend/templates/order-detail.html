@@ -108,10 +108,9 @@
                                 <i class="ph ph-arrow-counter-clockwise"></i> Reorder
                             </button>
                             <button class="btn btn-outline btn-sm"
-                                    style="color:var(--color-error); border-color:var(--color-error)"
+                                    style="display:none; color:var(--color-error); border-color:var(--color-error)"
                                     id="cancel-btn"
-                                    onclick="cancelThisOrder()"
-                                    style="display:none">
+                                    onclick="cancelThisOrder()">
                                 <i class="ph ph-x"></i> Cancel Order
                             </button>
                         </div>
@@ -197,6 +196,7 @@ async function loadOrderDetail() {
     try {
         const res  = await API.get(`/api/orders/${orderNumber}`);
         orderData  = res.data?.order;
+        window.__orderData = orderData;
 
         document.getElementById('detail-loading').style.display = 'none';
         document.getElementById('detail-content').style.display = 'block';
@@ -287,7 +287,7 @@ function renderOrderDetail(order) {
     }
 
     // Cancel button
-    if (['pending','confirmed'].includes(order.status)) {
+    if (['pending','confirmed','processing'].includes(order.status)) {
         document.getElementById('cancel-btn').style.display = 'inline-flex';
     }
 

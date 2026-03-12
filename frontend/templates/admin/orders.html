@@ -12,8 +12,8 @@
     <input type="search" class="form-input" id="order-search"
            placeholder="Search order number or customer..."
            style="max-width:300px"
-           oninput="debounce(loadOrders, 400)()">
-    <select class="sort-select" id="order-status-filter" onchange="loadOrders()">
+           oninput="debounce(resetAndLoad, 400)()">
+    <select class="sort-select" id="order-status-filter" onchange="resetAndLoad()">
         <option value="">All Statuses</option>
         <option value="pending">Pending</option>
         <option value="confirmed">Confirmed</option>
@@ -21,6 +21,8 @@
         <option value="shipped">Shipped</option>
         <option value="delivered">Delivered</option>
         <option value="cancelled">Cancelled</option>
+        <option value="expired">Expired</option>
+        <option value="payment_failed">Payment Failed</option>
         <option value="refunded">Refunded</option>
     </select>
 </div>
@@ -57,7 +59,7 @@
 <div class="modal-backdrop" id="status-modal">
     <div class="modal">
         <div class="modal-header">
-            <h3>Update Order Status</h3>
+            <h3 id="modal-title">Update Order Status</h3>
             <button class="modal-close" onclick="closeModal('status-modal')">
                 <i class="ph ph-x"></i>
             </button>
@@ -67,22 +69,12 @@
                       color:var(--color-text-muted)">
                 Order: <strong id="modal-order-num"></strong>
             </p>
-            <div class="form-group">
-                <label class="form-label">New Status</label>
-                <select class="form-select" id="modal-new-status">
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="processing">Processing</option>
-                    <option value="shipped">Shipped</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="refunded">Refunded</option>
-                </select>
-            </div>
+            <div id="modal-status-body"></div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-ghost" onclick="closeModal('status-modal')">Cancel</button>
-            <button class="btn btn-primary" onclick="confirmStatusUpdate()">Update</button>
+            <button class="btn btn-primary" id="modal-save-btn"
+                    onclick="confirmStatusUpdate()">Update</button>
         </div>
     </div>
 </div>
@@ -94,6 +86,11 @@
 <script>
 let currentPage   = 1;
 let editingOrder  = null;
+
+const STATUS_NEXT   = { confirmed: 'processing', processing: 'shipped', shipped: 'delivered' };
+const STATUS_LOCKED = new Set(['pending', 'payment_failed', 'cancelled', 'refunded', 'expired', 'delivered']);
+
+function resetAndLoad() { currentPage = 1; loadOrders(); }
 
 document.addEventListener('DOMContentLoaded', loadOrders);
 
@@ -108,7 +105,7 @@ async function loadOrders() {
     const status = document.getElementById('order-status-filter').value;
 
     const params = new URLSearchParams({ page: currentPage, per_page: 15 });
-    if (search) params.set('q',      search);
+    if (search) params.set('search', search);
     if (status) params.set('status', status);
 
     try {
@@ -140,10 +137,13 @@ async function loadOrders() {
                 </span></td>
                 <td>
                     <div class="admin-table-actions">
+                        <a href="/admin/orders/${o.order_number}"
+                           class="btn btn-ghost btn-sm">View</a>
+                        ${STATUS_NEXT[o.status] ? `
                         <button class="btn btn-primary btn-sm"
                                 onclick="openStatusModal('${o.order_number}','${o.status}')">
                             Update
-                        </button>
+                        </button>` : ''}
                     </div>
                 </td>
             </tr>
@@ -158,8 +158,32 @@ async function loadOrders() {
 
 function openStatusModal(orderNum, currentStatus) {
     editingOrder = orderNum;
-    document.getElementById('modal-order-num').textContent  = orderNum;
-    document.getElementById('modal-new-status').value       = currentStatus;
+    const nextStatus = STATUS_NEXT[currentStatus];
+
+    document.getElementById('modal-order-num').textContent = orderNum;
+    document.getElementById('modal-title').textContent     =
+        `Update Order Status — Currently: ${capitalize(currentStatus)}`;
+
+    const bodyEl  = document.getElementById('modal-status-body');
+    const saveBtn = document.getElementById('modal-save-btn');
+
+    if (nextStatus) {
+        bodyEl.innerHTML = `
+            <div class="form-group">
+                <label class="form-label">New Status</label>
+                <select class="form-select" id="modal-new-status">
+                    <option value="${nextStatus}">${capitalize(nextStatus)}</option>
+                </select>
+            </div>`;
+        saveBtn.style.display = '';
+    } else {
+        bodyEl.innerHTML = `
+            <p style="font-size:var(--text-sm); color:var(--color-text-muted)">
+                This order status cannot be changed.
+            </p>`;
+        saveBtn.style.display = 'none';
+    }
+
     document.getElementById('status-modal').classList.add('open');
 }
 

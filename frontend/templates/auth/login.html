@@ -26,8 +26,8 @@
 
             <div class="form-group">
                 <label class="form-label"
-                       style="display:flex; justify-content:space-between">
-                    Password <span class="required">*</span>
+                       style="display:flex; justify-content:space-between; align-items:center">
+                    <span>Password <span class="required">*</span></span>
                     <a href="/auth/forgot-password"
                        style="font-weight:var(--weight-regular);
                               color:var(--color-primary); font-size:var(--text-xs)">
@@ -45,6 +45,15 @@
                         <i class="ph ph-eye" id="login-pass-eye"></i>
                     </button>
                 </div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-4)">
+                <input type="checkbox" id="remember-me"
+                       style="width:16px; height:16px; accent-color:var(--color-primary); cursor:pointer; flex-shrink:0">
+                <label for="remember-me"
+                       style="font-size:var(--text-sm); color:var(--color-text); cursor:pointer; margin:0">
+                    Remember me
+                </label>
             </div>
 
             <button class="btn btn-primary btn-full btn-lg"
@@ -78,6 +87,14 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = getNextUrl();
         return;
     }
+
+    // Pre-fill remembered email (password is never stored)
+    if (localStorage.getItem('kyff_remember_me') === 'true') {
+        const savedEmail = localStorage.getItem('kyff_remembered_email') || '';
+        document.getElementById('login-email').value   = savedEmail;
+        document.getElementById('remember-me').checked = true;
+    }
+
     document.getElementById('login-email').focus();
 });
 
@@ -122,6 +139,17 @@ async function submitLogin() {
 
     btn.disabled  = true;
     btn.classList.add('loading');
+
+    // Handle Remember Me before login attempt
+    if (document.getElementById('remember-me').checked) {
+        localStorage.setItem('kyff_remember_me',      'true');
+        localStorage.setItem('kyff_remembered_email',  email);
+    } else {
+        localStorage.removeItem('kyff_remember_me');
+        localStorage.removeItem('kyff_remembered_email');
+    }
+    // Clean up any password that may have been stored by an older version
+    localStorage.removeItem('kyff_remembered_password');
 
     try {
         await Auth.login(email, password);
