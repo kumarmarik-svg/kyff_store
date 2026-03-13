@@ -15,17 +15,17 @@
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>Preview</th>
-                    <th>Title</th>
-                    <th>Position</th>
                     <th>Sort</th>
-                    <th>Schedule</th>
-                    <th>Status</th>
+                    <th>Image</th>
+                    <th>Title</th>
+                    <th>Link URL</th>
+                    <th>Active</th>
+                    <th>Dates</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="banners-tbody">
-                <tr><td colspan="7" style="text-align:center; padding:var(--space-8)">
+                <tr><td colspan="8" style="text-align:center; padding:var(--space-8)">
                     <div class="spinner" style="margin:0 auto"></div>
                 </td></tr>
             </tbody>
@@ -45,30 +45,66 @@
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label class="form-label">Title</label>
-                <input type="text" class="form-input" id="b-title" placeholder="Banner heading">
+                <label class="form-label">Title <span class="required">*</span></label>
+                <input type="text" class="form-input" id="b-title" placeholder="e.g. Free shipping on orders above ₹499">
             </div>
             <div class="form-group">
-                <label class="form-label">Image URL <span class="required">*</span></label>
-                <input type="url" class="form-input" id="b-image" placeholder="https://...">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Link URL</label>
-                <input type="url" class="form-input" id="b-link" placeholder="/products?sale=true">
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4)">
-                <div class="form-group">
-                    <label class="form-label">Position</label>
-                    <select class="form-select" id="b-position">
-                        <option value="hero">Hero</option>
-                        <option value="sidebar">Sidebar</option>
-                        <option value="popup">Popup</option>
+                <label class="form-label">Banner Image</label>
+
+                <!-- Step 1: Folder -->
+                <div style="margin-bottom:8px;">
+                    <select class="form-select" id="bannerFolderSelect" onchange="onBannerFolderChange()">
+                        <option value="">-- Select folder --</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Sort Order</label>
-                    <input type="number" class="form-input" id="b-sort" value="0" min="0">
+
+                <!-- Step 2: Image grid (hidden until folder selected) -->
+                <div id="bannerImageSelectWrap" style="display:none; margin-top:8px;">
+
+                    <!-- Search filter -->
+                    <input type="text" id="bannerImageSearch"
+                           placeholder="Search images..."
+                           oninput="filterBannerImages()"
+                           style="width:100%; margin-bottom:10px; padding:8px 12px;
+                                  border:1px solid #e5e7eb; border-radius:8px;
+                                  font-size:13px;">
+
+                    <!-- Image grid -->
+                    <div id="bannerImageGrid"
+                         style="display:grid;
+                                grid-template-columns: repeat(3, 1fr);
+                                gap:8px;
+                                max-height:220px;
+                                overflow-y:auto;
+                                border:1px solid #e5e7eb;
+                                border-radius:8px;
+                                padding:8px;">
+                    </div>
+
+                    <!-- Selected indicator -->
+                    <div id="bannerSelectedLabel"
+                         style="font-size:12px; color:#1a7f4b; margin-top:6px; display:none;">
+                        ✓ Selected: <span id="bannerSelectedName"></span>
+                    </div>
+
                 </div>
+
+                <!-- Hidden field -->
+                <input type="hidden" id="bannerImageUrl">
+
+                <!-- Preview -->
+                <div id="bannerPreviewWrap" style="display:none; margin-top:10px;">
+                    <img id="bannerPreview"
+                         style="max-height:140px; border-radius:8px;
+                                max-width:100%; object-fit:cover;">
+                    <div id="bannerImagePath"
+                         style="font-size:11px; color:#888; margin-top:4px;
+                                word-break:break-all;"></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Sort Order</label>
+                <input type="number" class="form-input" id="b-sort" value="0" min="0">
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4)">
                 <div class="form-group">
@@ -95,11 +131,48 @@
 
 
 {% block extra_js %}
+<style>
+.banner-img-option {
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    overflow: hidden;
+    text-align: center;
+    padding: 4px;
+    transition: border-color 0.2s, background 0.2s;
+}
+.banner-img-option:hover {
+    border-color: #1a7f4b;
+    background: #f0faf4;
+}
+.banner-img-option.selected {
+    border-color: #1a7f4b;
+    background: #e6f4ec;
+}
+.banner-img-option img {
+    width: 100%;
+    height: 70px;
+    object-fit: cover;
+    border-radius: 6px;
+    display: block;
+}
+.banner-img-option .img-name {
+    font-size: 10px;
+    color: #555;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+</style>
+
 <script>
 let editingBannerId = null;
 
 document.addEventListener('DOMContentLoaded', loadBanners);
 
+// ── Load banners table ────────────────────────────────────────
 async function loadBanners() {
     try {
         const res     = await API.get('/api/admin/banners');
@@ -107,7 +180,7 @@ async function loadBanners() {
         const tbody   = document.getElementById('banners-tbody');
 
         if (banners.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;
                 color:var(--color-text-muted); padding:var(--space-8)">
                 No banners yet</td></tr>`;
             return;
@@ -115,23 +188,28 @@ async function loadBanners() {
 
         tbody.innerHTML = banners.map(b => `
             <tr>
+                <td>${b.sort_order}</td>
                 <td>
-                    <img src="${b.image_url}" alt="${b.title||''}"
-                         style="width:80px; height:45px; object-fit:cover;
-                                border-radius:var(--radius-sm)"
-                         onerror="this.style.display='none'">
+                    ${b.image_url
+                        ? `<img src="${b.image_url}" alt="${b.title || ''}"
+                               style="width:60px; height:40px; object-fit:cover; border-radius:var(--radius-sm);"
+                               onerror="this.style.display='none'">`
+                        : '<span style="color:var(--color-text-muted); font-size:var(--text-xs)">—</span>'
+                    }
                 </td>
                 <td>${b.title || '—'}</td>
-                <td><span class="badge badge-primary">${b.position}</span></td>
-                <td>${b.sort_order}</td>
-                <td style="font-size:var(--text-xs); color:var(--color-text-muted)">
-                    ${b.start_date ? b.start_date : '—'} →
-                    ${b.end_date   ? b.end_date   : '∞'}
+                <td style="font-size:var(--text-xs); color:var(--color-text-muted); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${b.link_url ? `<a href="${b.link_url}" target="_blank" style="color:var(--color-accent)">${b.link_url}</a>` : '—'}
                 </td>
                 <td>
-                    <span class="badge ${b.is_active ? 'badge-success' : 'badge-error'}">
+                    <button
+                        onclick="toggleActive(${b.id}, ${b.is_active})"
+                        style="background:${b.is_active ? '#22c55e' : '#9ca3af'}; color:white; border:none; border-radius:20px; padding:3px 14px; font-size:var(--text-xs); font-weight:600; cursor:pointer; white-space:nowrap;">
                         ${b.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    </button>
+                </td>
+                <td style="font-size:var(--text-xs); color:var(--color-text-muted)">
+                    ${b.start_date || '—'} → ${b.end_date || '∞'}
                 </td>
                 <td>
                     <div class="admin-table-actions">
@@ -154,58 +232,213 @@ async function loadBanners() {
     }
 }
 
+// ── Image: load folders ───────────────────────────────────────
+async function loadFolderDropdown() {
+    try {
+        const res  = await fetch('/api/admin/images/folders', {
+            headers: { Authorization: 'Bearer ' + localStorage.getItem('kyff_access_token') }
+        });
+        const data = await res.json();
+        const select = document.getElementById('bannerFolderSelect');
+        select.innerHTML = '<option value="">-- Select folder --</option>';
+        (data.folders || []).forEach(f => {
+            const opt = document.createElement('option');
+            opt.value       = f;
+            opt.textContent = f === '' ? 'images (root)' : f;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        console.log('Could not load folders', e);
+    }
+}
+
+// ── Image: folder selected → load image grid ─────────────────
+let _bannerImages = [];
+
+async function onBannerFolderChange() {
+    const folder = document.getElementById('bannerFolderSelect').value;
+    const wrap   = document.getElementById('bannerImageSelectWrap');
+
+    setBannerImage('');
+    _bannerImages = [];
+    document.getElementById('bannerImageSearch').value = '';
+    document.getElementById('bannerImageGrid').innerHTML = '';
+    document.getElementById('bannerSelectedLabel').style.display = 'none';
+
+    if (folder === '' || folder === undefined || folder === null) {
+        wrap.style.display = 'none';
+        return;
+    }
+
+    try {
+        const res  = await fetch(
+            '/api/admin/images/list?folder=' + encodeURIComponent(folder),
+            { headers: { Authorization: 'Bearer ' + localStorage.getItem('kyff_access_token') } }
+        );
+        const data = await res.json();
+        _bannerImages = data.images || [];
+
+        if (_bannerImages.length === 0) {
+            document.getElementById('bannerImageGrid').innerHTML =
+                '<div style="grid-column:1/-1; text-align:center; ' +
+                'color:#9ca3af; padding:20px; font-size:13px;">No images in this folder</div>';
+        } else {
+            renderBannerImageGrid(_bannerImages);
+        }
+        wrap.style.display = 'block';
+    } catch (e) {
+        showToast('Could not load images', 'error');
+    }
+}
+
+function renderBannerImageGrid(images) {
+    const grid = document.getElementById('bannerImageGrid');
+    grid.innerHTML = '';
+    const currentUrl = document.getElementById('bannerImageUrl').value;
+    images.forEach(img => {
+        const div = document.createElement('div');
+        div.className = 'banner-img-option' + (img.url === currentUrl ? ' selected' : '');
+        div.dataset.url      = img.url;
+        div.dataset.filename = img.filename;
+        div.innerHTML = `
+            <img src="${img.url}" alt="${img.filename}"
+                 loading="lazy"
+                 onerror="this.src='/static/images/placeholder.png'">
+            <div class="img-name" title="${img.filename}">${img.filename}</div>
+        `;
+        div.addEventListener('click', () => selectBannerImage(div, img.url, img.filename));
+        grid.appendChild(div);
+    });
+}
+
+function selectBannerImage(el, url, filename) {
+    document.querySelectorAll('.banner-img-option').forEach(d => d.classList.remove('selected'));
+    el.classList.add('selected');
+    setBannerImage(url);
+    document.getElementById('bannerSelectedName').textContent = filename;
+    document.getElementById('bannerSelectedLabel').style.display = 'block';
+}
+
+function filterBannerImages() {
+    const q = document.getElementById('bannerImageSearch').value.toLowerCase();
+    renderBannerImageGrid(_bannerImages.filter(img => img.filename.toLowerCase().includes(q)));
+}
+
+// ── Set hidden field + preview ────────────────────────────────
+function setBannerImage(url) {
+    document.getElementById('bannerImageUrl').value = url;
+    const preview = document.getElementById('bannerPreview');
+    const wrap    = document.getElementById('bannerPreviewWrap');
+    const path    = document.getElementById('bannerImagePath');
+    if (url) {
+        preview.src        = url;
+        path.textContent   = url;
+        wrap.style.display = 'block';
+    } else {
+        wrap.style.display = 'none';
+    }
+}
+
+// ── Reset image section ───────────────────────────────────────
+function _resetImageSection() {
+    _bannerImages = [];
+    document.getElementById('bannerFolderSelect').value            = '';
+    document.getElementById('bannerImageGrid').innerHTML           = '';
+    document.getElementById('bannerImageSearch').value            = '';
+    document.getElementById('bannerSelectedLabel').style.display   = 'none';
+    document.getElementById('bannerImageSelectWrap').style.display = 'none';
+    setBannerImage('');
+}
+
+// ── Open modal (Add) ──────────────────────────────────────────
 function openBannerModal() {
     editingBannerId = null;
     document.getElementById('banner-modal-title').textContent = 'Add Banner';
-    ['b-title','b-image','b-link','b-start','b-end'].forEach(id =>
-        document.getElementById(id).value = '');
-    document.getElementById('b-position').value = 'hero';
+    document.getElementById('b-title').value    = '';
     document.getElementById('b-sort').value     = '0';
+    document.getElementById('b-start').value    = '';
+    document.getElementById('b-end').value      = '';
     document.getElementById('b-active').checked = true;
+    _resetImageSection();
+    loadFolderDropdown();
     document.getElementById('banner-modal').classList.add('open');
 }
 
-function editBanner(b) {
+// ── Open modal (Edit) ─────────────────────────────────────────
+async function editBanner(b) {
     editingBannerId = b.id;
     document.getElementById('banner-modal-title').textContent = 'Edit Banner';
     document.getElementById('b-title').value    = b.title      || '';
-    document.getElementById('b-image').value    = b.image_url  || '';
-    document.getElementById('b-link').value     = b.link_url   || '';
-    document.getElementById('b-position').value = b.position   || 'hero';
-    document.getElementById('b-sort').value     = b.sort_order || 0;
+    document.getElementById('b-sort').value     = b.sort_order ?? 0;
     document.getElementById('b-start').value    = b.start_date || '';
     document.getElementById('b-end').value      = b.end_date   || '';
     document.getElementById('b-active').checked = b.is_active;
+
+    _resetImageSection();
+    await loadFolderDropdown();
+
+    if (b.image_url) {
+        // Detect folder from URL: /static/images/foo/bar/file.jpg → "foo/bar"
+        const prefix = '/static/images/';
+        let folder = '';
+        if (b.image_url.startsWith(prefix)) {
+            const rel = b.image_url.slice(prefix.length);
+            const idx = rel.lastIndexOf('/');
+            folder = idx >= 0 ? rel.slice(0, idx) : '';
+        }
+        document.getElementById('bannerFolderSelect').value = folder;
+        await onBannerFolderChange();
+        // Pre-select the matching card in the grid
+        const card = document.querySelector(
+            `.banner-img-option[data-url="${CSS.escape(b.image_url)}"]`
+        );
+        if (card) {
+            selectBannerImage(card, b.image_url,
+                card.dataset.filename || b.image_url.split('/').pop());
+        } else {
+            setBannerImage(b.image_url);
+        }
+    }
+
     document.getElementById('banner-modal').classList.add('open');
 }
 
+// ── Save ──────────────────────────────────────────────────────
 async function saveBanner() {
-    const image = document.getElementById('b-image').value.trim();
-    if (!image) { showToast('Image URL is required', 'warning'); return; }
+    const title = document.getElementById('b-title').value.trim();
+    if (!title) { showToast('Title is required', 'warning'); return; }
 
     const payload = {
-        title      : document.getElementById('b-title').value.trim()    || null,
-        image_url  : image,
-        link_url   : document.getElementById('b-link').value.trim()     || null,
-        position   : document.getElementById('b-position').value,
-        sort_order : parseInt(document.getElementById('b-sort').value)  || 0,
-        start_date : document.getElementById('b-start').value           || null,
-        end_date   : document.getElementById('b-end').value             || null,
+        title      : title,
+        image_url  : document.getElementById('bannerImageUrl').value.trim() || null,
+        sort_order : parseInt(document.getElementById('b-sort').value)       || 0,
+        start_date : document.getElementById('b-start').value               || null,
+        end_date   : document.getElementById('b-end').value                 || null,
         is_active  : document.getElementById('b-active').checked,
     };
 
     try {
         if (editingBannerId) {
             await API.patch(`/api/admin/banners/${editingBannerId}`, payload);
-            showToast('Banner updated ✅');
+            showToast('Banner updated');
         } else {
             await API.post('/api/admin/banners', payload);
-            showToast('Banner created ✅');
+            showToast('Banner created');
         }
         closeModal('banner-modal');
         loadBanners();
     } catch (err) {
         showToast(err.message || 'Save failed', 'error');
+    }
+}
+
+// ── Toggle / Delete ───────────────────────────────────────────
+async function toggleActive(id, currentState) {
+    try {
+        await API.patch(`/api/admin/banners/${id}`, { is_active: !currentState });
+        loadBanners();
+    } catch (err) {
+        showToast(err.message || 'Failed to toggle', 'error');
     }
 }
 
@@ -224,14 +457,3 @@ function openModal(id)  { document.getElementById(id).classList.add('open');    
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 </script>
 {% endblock %}
-```
-
----
-
-## Progress
-```
-Frontend:
-  All CSS             ✅
-  All HTML Templates  ✅
-  JS files (4)        ← next (api.js, auth.js, cart.js, main.js)
-  Flask Routes        ← after JS

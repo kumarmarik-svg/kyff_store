@@ -1,5 +1,8 @@
 import os
+import re
 import uuid
+import time
+import shutil
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
@@ -8,7 +11,7 @@ from ..extensions import db
 from ..models import (
     User, Product, ProductVariant, ProductImage,
     Category, Order, OrderItem, Payment,
-    Review, Banner, ShippingRule
+    Review, Banner, ShippingRule, CartItem
 )
 from werkzeug.utils import secure_filename
 from flask import request, jsonify, current_app
@@ -489,12 +492,17 @@ def create_product():
 
         # ── Create variants ───────────────────────────────────
         for v in variants:
+            new_price      = float(v["price"])
+            new_sale_price = float(v["sale_price"]) if v.get("sale_price") else None
+            # Set old_price to the regular price when a sale is active
+            new_old_price  = new_price if new_sale_price is not None else None
             variant = ProductVariant(
                 product_id   = product.id,
                 label        = v["label"].strip(),
                 sku          = v.get("sku",          "").strip() or None,
-                price        = float(v["price"]),
-                sale_price   = float(v["sale_price"]) if v.get("sale_price") else None,
+                price        = new_price,
+                sale_price   = new_sale_price,
+                old_price    = new_old_price,
                 stock_qty    = int(v["stock_qty"]),
                 weight_grams = int(v["weight_grams"]) if v.get("weight_grams") else None,
                 is_active    = True
@@ -611,6 +619,96 @@ def update_product(product_id):
     if "is_featured" in data:
         val = data["is_featured"]
         product.is_featured = (val.lower() in ('true', '1', 'yes')) if isinstance(val, str) else bool(val)
+
+    # ── Upsert variants if provided ───────────────────────────
+    if "variants" in data:
+        variants_raw = data.get("variants", "[]")
+        variants = json.loads(variants_raw) if isinstance(variants_raw, str) else variants_raw
+
+        if variants:
+            try:
+                # Index existing variants by ID — never delete+recreate,
+                # always update in place to preserve FK references in
+                # cart_items and order_items.
+                existing_variants = {
+                    v.id: v for v in product.variants.all()
+                }
+                submitted_ids = set()
+
+                for v_data in variants:
+                    if not (v_data.get("label") or "").strip() or not v_data.get("price"):
+                        continue
+
+                    v_id = v_data.get("id")
+                    if v_id and int(v_id) in existing_variants:
+                        # UPDATE existing variant in place — preserves its ID
+                        variant = existing_variants[int(v_id)]
+                        submitted_ids.add(int(v_id))
+                    else:
+                        # NEW variant — no existing ID to preserve
+                        variant = ProductVariant(product_id=product.id)
+                        db.session.add(variant)
+
+                    # Safely parse sale_price — treat '' and None both as NULL
+                    raw = v_data.get("sale_price")
+                    if raw == "" or raw is None:
+                        new_sale_price = None
+                    else:
+                        try:
+                            new_sale_price = float(raw)
+                        except (TypeError, ValueError):
+                            new_sale_price = None
+
+                    # Auto-shift old_price before overwriting sale_price.
+                    # Only meaningful for existing variants (new ones have no history).
+                    try:
+                        if variant.id:
+                            effective_current = (
+                                float(variant.sale_price) if variant.sale_price is not None
+                                else float(variant.price) if variant.price is not None
+                                else None
+                            )
+                            if effective_current is not None:
+                                compare_new = (
+                                    new_sale_price if new_sale_price is not None
+                                    else float(v_data.get("price") or 0)
+                                )
+                                if compare_new != effective_current:
+                                    variant.old_price = effective_current
+                    except (TypeError, ValueError):
+                        pass  # never crash product save over price history
+
+                    # Update fields in place
+                    variant.label      = (v_data.get("label") or "").strip()
+                    variant.price      = float(v_data.get("price") or 0)
+                    variant.sale_price = new_sale_price
+                    variant.stock_qty  = int(v_data.get("stock_qty") or 0)
+                    variant.sku        = (v_data.get("sku") or "").strip() or None
+                    variant.weight_grams = int(v_data["weight_grams"]) if v_data.get("weight_grams") else None
+                    variant.is_active  = bool(v_data.get("is_active", True))
+
+                # Remove variants not in this submission —
+                # but NEVER delete one referenced by a cart_item; deactivate instead.
+                for v_id, variant in existing_variants.items():
+                    if v_id not in submitted_ids:
+                        if CartItem.query.filter_by(variant_id=v_id).first():
+                            variant.is_active = False
+                        else:
+                            db.session.delete(variant)
+
+                db.session.flush()
+
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Variant update error: {e}")
+                return error(str(e), 500)
+
+    # Clean up deactivated variants with no cart or order references
+    # (leftovers from previous broken delete+recreate saves)
+    for v in ProductVariant.query.filter_by(product_id=product_id, is_active=False).all():
+        if (not CartItem.query.filter_by(variant_id=v.id).first() and
+                not OrderItem.query.filter_by(variant_id=v.id).first()):
+            db.session.delete(v)
 
     # Recalculate base_price from active variants
     active_variants = product.variants.filter_by(is_active=True).all()
@@ -874,6 +972,15 @@ def toggle_user(user_id):
 # BANNERS
 # ════════════════════════════════════════════════════════════
 
+def parse_date(val):
+    """Parse a YYYY-MM-DD string to a date object; return None on any failure."""
+    if not val:
+        return None
+    try:
+        return datetime.strptime(val, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
 # ── GET /api/admin/banners ────────────────────────────────────
 @admin_bp.route("/banners", methods=["GET"])
 @admin_required
@@ -894,39 +1001,37 @@ def create_banner():
     Creates a new banner.
 
     Request body (JSON):
-        image_url  : string, required
-        title      : string, optional
+        title      : string, required
+        image_url  : string, optional
         link_url   : string, optional
-        position   : string, optional (hero/sidebar/popup)
         sort_order : int,    optional
+        is_active  : bool,   optional (default True)
         start_date : string, optional (YYYY-MM-DD)
         end_date   : string, optional (YYYY-MM-DD)
     """
-    data = request.get_json()
+    data  = request.get_json() or {}
+    title = (data.get("title") or "").strip()
 
-    if not data or not data.get("image_url"):
-        return error("image_url is required")
+    if not title:
+        return jsonify({"success": False, "message": "Title is required"}), 400
 
-    banner = Banner(
-        image_url  = data["image_url"].strip(),
-        title      = data.get("title",      "").strip() or None,
-        link_url   = data.get("link_url",   "").strip() or None,
-        position   = data.get("position",   "hero"),
-        sort_order = data.get("sort_order", 0),
-        is_active  = data.get("is_active",  True),
-        start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
-                     if data.get("start_date") else None,
-        end_date   = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
-                     if data.get("end_date") else None,
-    )
-    db.session.add(banner)
-    db.session.commit()
-
-    return success(
-        message = "Banner created",
-        data    = {"banner": banner.to_dict()},
-        code    = 201
-    )
+    try:
+        banner = Banner(
+            title      = title,
+            image_url  = (data.get("image_url") or "").strip(),
+            link_url   = (data.get("link_url")   or "").strip() or None,
+            position   = "sidebar",
+            sort_order = int(data.get("sort_order") or 0),
+            is_active  = bool(data.get("is_active", True)),
+            start_date = parse_date(data.get("start_date")),
+            end_date   = parse_date(data.get("end_date")),
+        )
+        db.session.add(banner)
+        db.session.commit()
+        return jsonify({"success": True, "banner": banner.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 # ── PATCH /api/admin/banners/<banner_id> ──────────────────────
@@ -942,20 +1047,14 @@ def update_banner(banner_id):
     if not data:
         return error("Request body is required")
 
-    if "title"      in data: banner.title      = data["title"].strip() or None
-    if "image_url"  in data: banner.image_url  = data["image_url"].strip()
-    if "link_url"   in data: banner.link_url   = data["link_url"].strip() or None
+    if "title"      in data: banner.title      = (data["title"]     or "").strip() or None
+    if "image_url"  in data: banner.image_url  = (data["image_url"] or "").strip()
+    if "link_url"   in data: banner.link_url   = (data["link_url"]  or "").strip() or None
     if "position"   in data: banner.position   = data["position"]
-    if "sort_order" in data: banner.sort_order = data["sort_order"]
+    if "sort_order" in data: banner.sort_order = int(data["sort_order"] or 0)
     if "is_active"  in data: banner.is_active  = bool(data["is_active"])
-    if "start_date" in data:
-        banner.start_date = datetime.strptime(
-            data["start_date"], "%Y-%m-%d"
-        ).date() if data["start_date"] else None
-    if "end_date" in data:
-        banner.end_date = datetime.strptime(
-            data["end_date"], "%Y-%m-%d"
-        ).date() if data["end_date"] else None
+    if "start_date" in data: banner.start_date = parse_date(data["start_date"])
+    if "end_date"   in data: banner.end_date   = parse_date(data["end_date"])
 
     db.session.commit()
 
@@ -978,6 +1077,192 @@ def delete_banner(banner_id):
     db.session.commit()
 
     return success(message="Banner deleted")
+
+
+# ── POST /api/admin/banners/upload-image ──────────────────────
+@admin_bp.route("/banners/upload-image", methods=["POST"])
+@admin_required
+def upload_banner_image():
+    """
+    Uploads a banner image and saves it to
+    /static/images/products/banners/<filename>.
+
+    Returns: { image_url: "/static/images/products/banners/<filename>" }
+    """
+    file = request.files.get("image")
+    if not file or file.filename == "":
+        return jsonify({"error": "No file provided"}), 400
+
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp"):
+        return jsonify({"error": "Only JPG, PNG, WebP allowed"}), 400
+
+    filename = f"banner_{int(time.time())}_{secure_filename(file.filename)}"
+
+    save_dir = os.path.abspath(os.path.join(
+        current_app.root_path, "..", "..",
+        "frontend", "static", "images", "products", "banners"
+    ))
+    os.makedirs(save_dir, exist_ok=True)
+    file.save(os.path.join(save_dir, filename))
+
+    return jsonify({
+        "image_url": f"/static/images/products/banners/{filename}"
+    }), 200
+
+
+# ════════════════════════════════════════════════════════════
+# IMAGE MANAGER
+# ════════════════════════════════════════════════════════════
+
+def get_images_base():
+    return os.path.abspath(os.path.join(
+        current_app.root_path, "..", "..", "frontend", "static", "images"
+    ))
+
+
+def safe_path(base, *parts):
+    """Return absolute path only if it stays inside base; else None."""
+    full = os.path.abspath(os.path.join(base, *parts))
+    if full != base and not full.startswith(base + os.sep):
+        return None
+    return full
+
+
+# ── GET /api/admin/images/folders ─────────────────────────
+@admin_bp.route("/images/folders", methods=["GET"])
+@admin_required
+def list_image_folders():
+    """Returns a flat list of all sub-folder paths (relative to static/images/)."""
+    base = get_images_base()
+    folders = [""]  # root = ""
+    for root, dirs, _ in os.walk(base):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        for d in dirs:
+            rel = os.path.relpath(os.path.join(root, d), base).replace(os.sep, "/")
+            folders.append(rel)
+    return jsonify({"folders": folders})
+
+
+# ── GET /api/admin/images/list?folder=products/banners ────
+@admin_bp.route("/images/list", methods=["GET"])
+@admin_required
+def list_images():
+    """Returns all image files inside a folder (default: root)."""
+    base   = get_images_base()
+    folder = request.args.get("folder", "").strip("/")
+    target = safe_path(base, folder) if folder else base
+    if not target or not os.path.isdir(target):
+        return error("Invalid folder", 400)
+
+    exts = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
+    images = []
+    for f in sorted(os.listdir(target)):
+        if os.path.splitext(f)[1].lower() in exts and os.path.isfile(os.path.join(target, f)):
+            rel = (folder + "/" + f) if folder else f
+            images.append({
+                "filename": f,
+                "url":      f"/static/images/{rel}",
+                "size":     os.path.getsize(os.path.join(target, f)),
+            })
+    return jsonify({"images": images})
+
+
+# ── POST /api/admin/images/create-folder ──────────────────
+@admin_bp.route("/images/create-folder", methods=["POST"])
+@admin_required
+def create_image_folder():
+    base   = get_images_base()
+    data   = request.get_json() or {}
+    folder = (data.get("folder") or "").strip().strip("/")
+    if not folder:
+        return error("Folder name required")
+    if not re.match(r'^[\w\-/]+$', folder):
+        return error("Folder name may only contain letters, digits, hyphens, underscores, and slashes")
+    target = safe_path(base, folder)
+    if not target:
+        return error("Invalid path", 400)
+    os.makedirs(target, exist_ok=True)
+    return jsonify({"success": True, "folder": folder})
+
+
+# ── POST /api/admin/images/upload ─────────────────────────
+@admin_bp.route("/images/upload", methods=["POST"])
+@admin_required
+def upload_image():
+    base   = get_images_base()
+    folder = request.form.get("folder", "").strip("/")
+    file   = request.files.get("image")
+    if not file or file.filename == "":
+        return error("No file provided")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        return error("Unsupported file type")
+    target_dir = safe_path(base, folder) if folder else base
+    if not target_dir:
+        return error("Invalid folder", 400)
+    os.makedirs(target_dir, exist_ok=True)
+    filename = f"{int(time.time())}_{secure_filename(file.filename)}"
+    file.save(os.path.join(target_dir, filename))
+    rel = (folder + "/" + filename) if folder else filename
+    return jsonify({"success": True, "url": f"/static/images/{rel}", "filename": filename})
+
+
+# ── DELETE /api/admin/images/delete-image ─────────────────
+@admin_bp.route("/images/delete-image", methods=["DELETE"])
+@admin_required
+def delete_image():
+    base     = get_images_base()
+    data     = request.get_json() or {}
+    folder   = (data.get("folder") or "").strip("/")
+    filename = (data.get("filename") or "").strip()
+    if not filename:
+        return error("Filename required")
+    target = safe_path(base, folder, filename) if folder else safe_path(base, filename)
+    if not target or not os.path.isfile(target):
+        return error("File not found", 404)
+    os.remove(target)
+    return jsonify({"success": True})
+
+
+# ── DELETE /api/admin/images/delete-folder ────────────────
+@admin_bp.route("/images/delete-folder", methods=["DELETE"])
+@admin_required
+def delete_image_folder():
+    base   = get_images_base()
+    data   = request.get_json() or {}
+    folder = (data.get("folder") or "").strip().strip("/")
+    if not folder:
+        return error("Folder required")
+    target = safe_path(base, folder)
+    if not target or not os.path.isdir(target):
+        return error("Folder not found", 404)
+    shutil.rmtree(target)
+    return jsonify({"success": True})
+
+
+# ── PATCH /api/admin/images/rename-image ──────────────────
+@admin_bp.route("/images/rename-image", methods=["PATCH"])
+@admin_required
+def rename_image():
+    base     = get_images_base()
+    data     = request.get_json() or {}
+    folder   = (data.get("folder") or "").strip("/")
+    old_name = (data.get("old_name") or "").strip()
+    new_name = (data.get("new_name") or "").strip()
+    if not old_name or not new_name:
+        return error("old_name and new_name required")
+    if not re.match(r'^[\w\-. ]+\.\w+$', new_name):
+        return error("Invalid filename")
+    old_path = safe_path(base, folder, old_name) if folder else safe_path(base, old_name)
+    new_path = safe_path(base, folder, new_name) if folder else safe_path(base, new_name)
+    if not old_path or not os.path.isfile(old_path):
+        return error("File not found", 404)
+    if not new_path:
+        return error("Invalid new path", 400)
+    os.rename(old_path, new_path)
+    rel = (folder + "/" + new_name) if folder else new_name
+    return jsonify({"success": True, "url": f"/static/images/{rel}"})
 
 
 # ════════════════════════════════════════════════════════════

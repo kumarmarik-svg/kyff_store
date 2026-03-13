@@ -291,12 +291,13 @@ async function loadProducts() {
 function renderProductCard(product) {
     const variant      = product.variants?.[0];
     const price        = variant ? parseFloat(variant.price) : parseFloat(product.base_price);
-    const salePrice    = variant?.sale_price ? parseFloat(variant.sale_price) : null;
-    const displayPrice = salePrice || price;
-    const hasDiscount  = salePrice && salePrice < price;
-    const discountPct  = hasDiscount ? Math.round(((price - salePrice) / price) * 100) : 0;
-    const image        = product.images?.[0]?.image_url || '/static/images/placeholder.png';
-    const inStock      = variant ? variant.stock_qty > 0 : false;
+    const effPrice    = (variant?.sale_price !== null && variant?.sale_price !== undefined)
+        ? parseFloat(variant.sale_price) : price;
+    const oldPrice    = variant?.old_price ? parseFloat(variant.old_price) : null;
+    const showStrike  = !!(oldPrice && oldPrice !== effPrice);
+    const discountPct = showStrike ? Math.round((oldPrice - effPrice) / oldPrice * 100) : 0;
+    const image       = product.images?.[0]?.image_url || '/static/images/placeholder.png';
+    const inStock     = variant ? variant.stock_qty > 0 : false;
 
     return `
         <div class="product-card">
@@ -304,7 +305,7 @@ function renderProductCard(product) {
                 <img src="${image}" alt="${product.name}" loading="lazy"
                      onerror="this.src='/static/images/placeholder.png'">
                 <div class="product-card-badges">
-                    ${hasDiscount ? `<span class="badge-sale">-${discountPct}%</span>` : ''}
+                    ${showStrike && discountPct > 0 ? `<span class="badge-sale">-${discountPct}%</span>` : ''}
                     ${product.is_featured ? `<span class="badge-featured">Featured</span>` : ''}
                     ${!inStock ? `<span class="badge-sale" style="background:var(--color-text-muted)">Out of Stock</span>` : ''}
                 </div>
@@ -326,10 +327,10 @@ function renderProductCard(product) {
                 ${product.source_info ? `<div class="product-card-source">🧑‍🌾 ${product.source_info}</div>` : ''}
                 <div class="product-card-footer">
                     <div class="product-card-price">
-                        <span class="price ${hasDiscount ? 'price-sale' : ''}">
-                            ₹${displayPrice.toFixed(2)}
+                        <span class="price ${showStrike ? 'price-sale' : ''}">
+                            ₹${effPrice.toFixed(2)}
                         </span>
-                        ${hasDiscount ? `<span class="price-original">₹${price.toFixed(2)}</span>` : ''}
+                        ${showStrike ? `<span class="price-original">₹${oldPrice.toFixed(2)}</span>` : ''}
                     </div>
                     <button
                         class="btn btn-primary btn-sm"

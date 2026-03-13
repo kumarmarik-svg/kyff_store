@@ -642,32 +642,40 @@ async function createCategory() {
 function addVariantRow(v = null) {
     const row = document.createElement('div');
     row.className = 'variant-row';
-    row.style.cssText = `
-        display: grid;
-        grid-template-columns: 2fr 1fr 1fr 1fr 36px;
-        gap: var(--space-2);
-        margin-bottom: var(--space-2);
-        align-items: center;
-    `;
+    row.dataset.variantId = v?.id || '';
+    row.style.cssText = `margin-bottom: var(--space-3);`;
+
+    const oldPriceHtml = v?.old_price
+        ? `<div style="font-size:var(--text-xs); color:var(--color-text-muted); margin-top:2px">
+               Was: ₹${parseFloat(v.old_price).toFixed(2)}
+           </div>`
+        : '';
+
     row.innerHTML = `
-        <input class="form-input" placeholder="Label (e.g. 500g)"
-               value="${v?.label || ''}"
-               style="font-size:var(--text-sm)">
-        <input class="form-input" type="number" placeholder="Price"
-               value="${v?.price || ''}"
-               style="font-size:var(--text-sm)">
-        <input class="form-input" type="number" placeholder="Sale"
-               value="${v?.sale_price || ''}"
-               style="font-size:var(--text-sm)">
-        <input class="form-input" type="number" placeholder="Stock"
-               value="${v?.stock_qty ?? 0}"
-               style="font-size:var(--text-sm)">
-        <button onclick="this.parentElement.remove()"
-                style="color:var(--color-error); font-size:1.1rem;
-                       background:none; border:none; cursor:pointer;
-                       padding:var(--space-1)">
-            <i class="ph ph-trash"></i>
-        </button>
+        <div style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr 36px;
+                    gap:var(--space-2); align-items:start;">
+            <input class="form-input" placeholder="Label (e.g. 500g)"
+                   value="${v?.label || ''}"
+                   style="font-size:var(--text-sm)">
+            <input class="form-input" type="number" placeholder="Price"
+                   value="${v?.price || ''}"
+                   style="font-size:var(--text-sm)">
+            <div>
+                <input class="form-input" type="number" placeholder="Sale"
+                       value="${v?.sale_price || ''}"
+                       style="font-size:var(--text-sm)">
+                ${oldPriceHtml}
+            </div>
+            <input class="form-input" type="number" placeholder="Stock"
+                   value="${v?.stock_qty ?? 0}"
+                   style="font-size:var(--text-sm)">
+            <button onclick="this.closest('.variant-row').remove()"
+                    style="color:var(--color-error); font-size:1.1rem;
+                           background:none; border:none; cursor:pointer;
+                           padding:var(--space-1); margin-top:4px">
+                <i class="ph ph-trash"></i>
+            </button>
+        </div>
     `;
     document.getElementById('variants-list').appendChild(row);
 }
@@ -684,11 +692,13 @@ async function saveProduct() {
     // Collect variants
     const variants = [];
     document.querySelectorAll('.variant-row').forEach(row => {
-        const inputs = row.querySelectorAll('input');
-        const label  = inputs[0].value.trim();
-        const price  = parseFloat(inputs[1].value);
+        const inputs    = row.querySelectorAll('input');
+        const label     = inputs[0].value.trim();
+        const price     = parseFloat(inputs[1].value);
+        const variantId = row.dataset.variantId || null;
         if (label && !isNaN(price) && price > 0) {
             variants.push({
+                id         : variantId ? parseInt(variantId) : null,
                 label,
                 price,
                 sale_price : inputs[2].value ? parseFloat(inputs[2].value) : null,

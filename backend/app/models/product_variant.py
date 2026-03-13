@@ -42,6 +42,12 @@ class ProductVariant(db.Model):
         comment="Discounted price — NULL means no active sale"
     )
 
+    old_price = db.Column(
+        db.Numeric(10, 2),
+        nullable=True,
+        comment="Previous regular price before discount — shown as strikethrough"
+    )
+
     # Inventory
     stock_qty = db.Column(
         db.Integer,
@@ -105,14 +111,27 @@ class ProductVariant(db.Model):
         self.stock_qty += quantity
 
     def to_dict(self):
+        def to_float(val):
+            try:
+                return float(val) if val is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        effective_price = (
+            to_float(self.sale_price)
+            if self.sale_price is not None
+            else to_float(self.price)
+        )
+
         return {
             "id":              self.id,
             "product_id":      self.product_id,
             "label":           self.label,
             "sku":             self.sku,
-            "price":           float(self.price),
-            "sale_price":      float(self.sale_price) if self.sale_price else None,
-            "effective_price": float(self.effective_price()),
+            "price":           to_float(self.price),
+            "sale_price":      to_float(self.sale_price),
+            "old_price":       to_float(self.old_price),
+            "effective_price": effective_price,
             "is_on_sale":      self.is_on_sale(),
             "stock_qty":       self.stock_qty,
             "is_in_stock":     self.is_in_stock(),

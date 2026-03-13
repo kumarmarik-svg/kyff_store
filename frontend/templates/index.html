@@ -6,12 +6,10 @@
      HERO BANNER
      ══════════════════════════════════════════════════════════ -->
 <section class="hero" id="hero">
-    <!-- Slides — populated by JS -->
-    <div id="hero-slides"></div>
+    <div class="hero-inner">
 
-    <!-- Static fallback while JS loads -->
-    <div class="hero-slide" id="hero-fallback">
-        <div class="container">
+        <!-- LEFT: static content, always visible -->
+        <div class="hero-left">
             <div class="hero-content">
                 <div class="hero-tag">
                     🌾 Direct from Tamil Nadu Farmers
@@ -24,10 +22,14 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Dots -->
-    <div class="hero-dots" id="hero-dots"></div>
+        <!-- RIGHT: image slideshow, populated by JS -->
+        <div class="hero-right">
+            <div class="hero-slider" id="heroSlider"></div>
+            <div class="hero-dots" id="heroDots"></div>
+        </div>
+
+    </div>
 </section>
 
 
@@ -259,12 +261,11 @@ function getCategoryIcon(slug) {
 function renderProductCard(product) {
     const variant     = product.variants?.[0];
     const price       = variant ? parseFloat(variant.price) : parseFloat(product.base_price);
-    const salePrice   = variant?.sale_price ? parseFloat(variant.sale_price) : null;
-    const displayPrice = salePrice || price;
-    const hasDiscount  = salePrice && salePrice < price;
-    const discountPct  = hasDiscount
-        ? Math.round(((price - salePrice) / price) * 100)
-        : 0;
+    const effPrice    = (variant?.sale_price !== null && variant?.sale_price !== undefined)
+        ? parseFloat(variant.sale_price) : price;
+    const oldPrice    = variant?.old_price ? parseFloat(variant.old_price) : null;
+    const showStrike  = !!(oldPrice && oldPrice !== effPrice);
+    const discountPct = showStrike ? Math.round((oldPrice - effPrice) / oldPrice * 100) : 0;
 
     const image = product.images?.[0]?.image_url || '/static/images/placeholder.png';
 
@@ -278,7 +279,7 @@ function renderProductCard(product) {
                     onerror="this.src='/static/images/placeholder.png'"
                 >
                 <div class="product-card-badges">
-                    ${hasDiscount ? `<span class="badge-sale">-${discountPct}%</span>` : ''}
+                    ${showStrike && discountPct > 0 ? `<span class="badge-sale">-${discountPct}%</span>` : ''}
                     ${product.is_featured ? `<span class="badge-featured">Featured</span>` : ''}
                 </div>
                 <div class="product-card-quick-add">
@@ -297,10 +298,10 @@ function renderProductCard(product) {
                 ${product.source_info ? `<div class="product-card-source">🧑‍🌾 ${product.source_info}</div>` : ''}
                 <div class="product-card-footer">
                     <div class="product-card-price">
-                        <span class="price ${hasDiscount ? 'price-sale' : ''}">
-                            ₹${displayPrice.toFixed(2)}
+                        <span class="price ${showStrike ? 'price-sale' : ''}">
+                            ₹${effPrice.toFixed(2)}
                         </span>
-                        ${hasDiscount ? `<span class="price-original">₹${price.toFixed(2)}</span>` : ''}
+                        ${showStrike ? `<span class="price-original">₹${oldPrice.toFixed(2)}</span>` : ''}
                     </div>
                     <button
                         class="btn btn-primary btn-sm"
@@ -344,64 +345,69 @@ async function quickAdd(event, variantId, productName) {
     }
 }
 
-// ── Load Hero Banners ──────────────────────────────────────
-async function loadHeroBanners() {
+// ── Hero Image Slideshow ───────────────────────────────────
+(async function initHeroSlider() {
     try {
-        const res = await API.get('/api/banners/');
-        const banners = res.data?.banners?.filter(b => b.position === 'hero') || [];
+        const res     = await fetch('/api/banners');
+        const data    = await res.json();
+        const banners = (data.banners || []).filter(b => b.image_url);
 
-        if (banners.length === 0) return; // keep static fallback
+        if (banners.length === 0) return; // right side stays empty
 
-        const slidesContainer = document.getElementById('hero-slides');
-        const dotsContainer   = document.getElementById('hero-dots');
-        const fallback        = document.getElementById('hero-fallback');
+        const slider = document.getElementById('heroSlider');
+        const dotsEl = document.getElementById('heroDots');
+        if (!slider) return;
 
-        fallback.style.display = 'none';
-
-        banners.forEach((banner, i) => {
-            // Slide
+        // Build slides
+        banners.forEach((b, i) => {
             const slide = document.createElement('div');
-            slide.className = 'hero-slide';
-            slide.id = `slide-${i}`;
-            slide.style.display = i === 0 ? 'flex' : 'none';
-            slide.innerHTML = `
-                <img src="${banner.image_url}" alt="${banner.title || 'KYFF Banner'}" class="hero-bg">
-                <div class="container">
-                    <div class="hero-content">
-                        ${banner.title ? `<h1>${banner.title}</h1>` : ''}
-                        ${banner.link_url ? `<a href="${banner.link_url}" class="btn btn-accent btn-lg">Shop Now</a>` : ''}
-                    </div>
-                </div>
-            `;
-            slidesContainer.appendChild(slide);
+            slide.className = 'hero-slide' + (i === 0 ? ' active' : '');
 
-            // Dot
-            const dot = document.createElement('button');
-            dot.className = `hero-dot ${i === 0 ? 'active' : ''}`;
-            dot.onclick = () => goToSlide(i);
-            dotsContainer.appendChild(dot);
+            const img = document.createElement('img');
+            img.src     = b.image_url;
+            img.alt     = b.title || 'Banner';
+            img.loading = 'lazy';
+
+            if (b.link_url) {
+                const a = document.createElement('a');
+                a.href = b.link_url;
+                a.appendChild(img);
+                slide.appendChild(a);
+            } else {
+                slide.appendChild(img);
+            }
+
+            slider.appendChild(slide);
+
+            // Dot (only when multiple slides)
+            if (banners.length > 1) {
+                const dot = document.createElement('button');
+                dot.className = 'hero-dot' + (i === 0 ? ' active' : '');
+                dot.addEventListener('click', () => goToSlide(i));
+                dotsEl.appendChild(dot);
+            }
         });
 
-        // Auto-slide
-        if (banners.length > 1) {
-            let current = 0;
-            setInterval(() => {
-                current = (current + 1) % banners.length;
-                goToSlide(current);
-            }, 4000);
+        if (banners.length <= 1) return; // no auto-advance needed
+
+        let current = 0;
+        const slides = slider.querySelectorAll('.hero-slide');
+        const dots   = dotsEl.querySelectorAll('.hero-dot');
+
+        function goToSlide(n) {
+            slides[current].classList.remove('active');
+            dots[current].classList.remove('active');
+            current = (n + slides.length) % slides.length;
+            slides[current].classList.add('active');
+            dots[current].classList.add('active');
         }
 
-    } catch (e) {
-        // keep static fallback
-    }
-}
+        setInterval(() => goToSlide(current + 1), 4000);
 
-function goToSlide(index) {
-    const slides = document.querySelectorAll('.hero-slide');
-    const dots   = document.querySelectorAll('.hero-dot');
-    slides.forEach((s, i) => s.style.display = i === index ? 'flex' : 'none');
-    dots.forEach((d, i) => d.classList.toggle('active', i === index));
-}
+    } catch (e) {
+        console.log('Hero slider failed silently', e);
+    }
+})();
 
 // ── Load Categories ────────────────────────────────────────
 async function loadCategories() {
@@ -523,7 +529,6 @@ if (farmerGrid) {
 // ── Init Homepage ──────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     await Promise.all([
-        loadHeroBanners(),
         loadCategories(),
         loadFeaturedProducts(),
         loadRecommendations(),
@@ -532,8 +537,92 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 </script>
 
-<!-- Farmer banner responsive fix -->
+<!-- Hero two-column layout + slideshow -->
 <style>
+.hero-inner {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 100%;
+}
+
+.hero-left {
+    flex: 0 0 42%;
+}
+
+.hero-right {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    height: 420px;
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .hero-right { display: none; }
+    .hero-left  { flex: unset; width: 100%; }
+}
+
+.hero-slider {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.hero-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+}
+
+.hero-slide.active {
+    opacity: 1;
+}
+
+.hero-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 16px;
+    display: block;
+}
+
+.hero-slide a {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#heroDots {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 2;
+}
+
+.hero-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: background 0.3s;
+    border: none;
+}
+
+.hero-dot.active {
+    background: white;
+}
+
+/* Farmer banner responsive fix */
 @media (min-width: 768px) {
     .farmer-banner-grid {
         grid-template-columns: 1fr 1fr !important;

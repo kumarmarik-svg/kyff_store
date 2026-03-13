@@ -74,7 +74,7 @@ def _cart_response(cart):
         if not variant or not product:
             continue
 
-        print(f"DEBUG image_url → {product.primary_image()}")
+        primary_img = product.primary_image()
 
         items_data.append({
             "cart_item_id":  item.id,
@@ -89,8 +89,7 @@ def _cart_response(cart):
             "line_total":    item.line_total(),
             "stock_qty":     variant.stock_qty,
             "is_in_stock":   variant.is_in_stock(),
-            "image_url":     product.primary_image().image_url
-                             if product.primary_image() else None,
+            "image_url":     primary_img.image_url if primary_img else None,
             "slug":          product.slug,
             "added_at":      item.added_at.isoformat(),
         })

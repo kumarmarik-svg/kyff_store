@@ -240,13 +240,17 @@
 
 
         <!-- ══════════════════════════════════════════════════
-             RELATED PRODUCTS
+             YOU MAY ALSO LIKE
              ══════════════════════════════════════════════════ -->
-        <div style="margin-top:var(--space-16)">
+        <div style="margin-top:var(--space-16)" id="youMayLikeSection" style="display:none">
             <div class="section-header">
-                <h2>You Might Also Like</h2>
+                <div>
+                    <h2>You May Also Like</h2>
+                    <p id="youMayLikeSubtitle"
+                       style="color:var(--color-text-muted); font-size:var(--text-sm); margin-top:var(--space-1)"></p>
+                </div>
             </div>
-            <div class="products-grid" id="related-products">
+            <div class="products-grid" id="youMayLikeGrid">
                 <!-- Populated by JS -->
             </div>
         </div>
@@ -323,7 +327,7 @@ async function loadProduct() {
         product   = res.data.product;
         renderProduct(product);
         loadReviews(product.id);
-        loadRelatedProducts(product.category_id);
+        loadYouMayAlsoLike(product.id, product.category_id);
     } catch (e) {
         document.getElementById('product-loading').innerHTML = `
             <div class="empty-state">
@@ -411,6 +415,41 @@ function renderProduct(p) {
 }
 
 
+// ── Price Display ───────────────────────────────────────────
+function updatePriceDisplay(variant) {
+    // effective = sale_price if set, else price
+    const effectivePrice = (variant.sale_price !== null && variant.sale_price !== undefined)
+        ? parseFloat(variant.sale_price)
+        : parseFloat(variant.price);
+
+    const oldPrice = (variant.old_price !== null && variant.old_price !== undefined)
+        ? parseFloat(variant.old_price)
+        : null;
+
+    const priceEl = document.getElementById('display-price');
+    const origEl  = document.getElementById('original-price');
+    const badgeEl = document.getElementById('discount-badge');
+
+    priceEl.textContent = `₹${effectivePrice.toFixed(2)}`;
+    priceEl.className   = (oldPrice && oldPrice !== effectivePrice) ? 'price price-sale' : 'price';
+
+    if (oldPrice && oldPrice !== effectivePrice) {
+        origEl.textContent   = `₹${oldPrice.toFixed(2)}`;
+        origEl.style.display = 'inline';
+        const pct = Math.round((oldPrice - effectivePrice) / oldPrice * 100);
+        if (pct > 0) {
+            badgeEl.textContent   = `${pct}% OFF`;
+            badgeEl.style.display = 'inline-flex';
+        } else {
+            badgeEl.style.display = 'none';
+        }
+    } else {
+        origEl.style.display  = 'none';
+        badgeEl.style.display = 'none';
+    }
+}
+
+
 // ── Select Variant ─────────────────────────────────────────
 function selectVariant(variant, btnEl) {
     selectedVariant = variant;
@@ -420,27 +459,7 @@ function selectVariant(variant, btnEl) {
     if (btnEl) btnEl.classList.add('active');
 
     // Update price
-    const price     = parseFloat(variant.price);
-    const salePrice = variant.sale_price ? parseFloat(variant.sale_price) : null;
-    const display   = salePrice || price;
-
-    const priceEl    = document.getElementById('display-price');
-    const origEl     = document.getElementById('original-price');
-    const badgeEl    = document.getElementById('discount-badge');
-
-    priceEl.textContent = `₹${display.toFixed(2)}`;
-    priceEl.className   = `price ${salePrice ? 'price-sale' : ''}`;
-
-    if (salePrice && salePrice < price) {
-        origEl.textContent  = `₹${price.toFixed(2)}`;
-        origEl.style.display = 'inline';
-        const pct = Math.round(((price - salePrice) / price) * 100);
-        badgeEl.textContent  = `-${pct}% OFF`;
-        badgeEl.style.display = 'inline-flex';
-    } else {
-        origEl.style.display  = 'none';
-        badgeEl.style.display = 'none';
-    }
+    updatePriceDisplay(variant);
 
     // Stock info
     const stockInfo = document.getElementById('stock-info');
@@ -668,35 +687,51 @@ async function submitReview() {
 }
 
 
-// ── Related Products ───────────────────────────────────────
-async function loadRelatedProducts(categoryId) {
+// ── You May Also Like ──────────────────────────────────────
+async function loadYouMayAlsoLike(productId, categoryId) {
     try {
-        const res      = await API.get(`/api/products/?category_id=${categoryId}&per_page=4`);
-        const products = res.data?.products?.filter(p => p.slug !== slug) || [];
-        const container = document.getElementById('related-products');
-        container.innerHTML = '';
+        const params = new URLSearchParams({ context: 'product' });
+        if (productId)  params.set('product_id',  productId);
+        if (categoryId) params.set('category_id', categoryId);
 
-        products.slice(0, 4).forEach(p => {
-            const variant      = p.variants?.[0];
-            const price        = variant ? parseFloat(variant.price) : parseFloat(p.base_price);
-            const image        = p.images?.[0]?.image_url || '/static/images/placeholder.png';
+        const res  = await API.get('/api/products/suggest?' + params);
+        const data = res.data;
+        const recs = data?.recommendations || [];
+        if (recs.length === 0) return;
 
-            container.innerHTML += `
-                <a href="/product/${p.slug}" class="product-card" style="text-decoration:none">
-                    <div class="product-card-image">
-                        <img src="${image}" alt="${p.name}" loading="lazy"
-                             onerror="this.src='/static/images/placeholder.png'">
-                    </div>
-                    <div class="product-card-body">
-                        <div class="product-card-name">${p.name}</div>
-                        <div class="product-card-footer">
-                            <span class="price">₹${price.toFixed(2)}</span>
+        document.getElementById('youMayLikeSubtitle').textContent =
+            data.type === 'personal'
+                ? 'Based on your purchase history'
+                : 'From the same category';
+
+        const grid = document.getElementById('youMayLikeGrid');
+        grid.innerHTML = recs.map(p => `
+            <a href="/product/${p.slug || p.id}" class="product-card" style="text-decoration:none">
+                <div class="product-card-image">
+                    <img src="${p.primary_image || '/static/images/placeholder.png'}"
+                         alt="${p.name}" loading="lazy"
+                         onerror="this.src='/static/images/placeholder.png'">
+                </div>
+                <div class="product-card-body">
+                    <div class="product-card-category">${p.category_name || ''}</div>
+                    <div class="product-card-name">${p.name}</div>
+                    <div class="product-card-footer">
+                        <div class="product-card-price">
+                            ${p.sale_price
+                                ? `<span class="price price-sale">₹${parseFloat(p.sale_price).toFixed(2)}</span>
+                                   <span class="price-original">₹${parseFloat(p.old_price || p.price).toFixed(2)}</span>`
+                                : `<span class="price">₹${parseFloat(p.price).toFixed(2)}</span>`
+                            }
                         </div>
                     </div>
-                </a>
-            `;
-        });
-    } catch (e) {}
+                </div>
+            </a>
+        `).join('');
+
+        document.getElementById('youMayLikeSection').style.display = 'block';
+    } catch (e) {
+        console.log('Recommendations failed silently', e);
+    }
 }
 
 

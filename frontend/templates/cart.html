@@ -145,10 +145,13 @@
         <!-- ── You May Also Like — full width below both columns ── -->
         <div style="margin-top:var(--space-8)" id="upsell-section">
             <h3 style="font-family:var(--font-body); font-size:var(--text-base);
-                       font-weight:var(--weight-semibold); margin-bottom:var(--space-4)">
+                       font-weight:var(--weight-semibold); margin-bottom:var(--space-2)">
                 You May Also Like
             </h3>
-            <div id="upsell-products" class="upsell-grid">
+            <p id="upsell-subtitle"
+               style="font-size:var(--text-sm); color:var(--color-text-muted);
+                      margin-bottom:var(--space-4)"></p>
+            <div id="upsell-products" class="products-grid">
                 <!-- Populated by JS -->
             </div>
         </div>
@@ -194,7 +197,7 @@ async function loadCart() {
         document.getElementById('cart-loading').style.display = 'none';
         applyCartState(items);
 
-        if (items.length > 0) loadUpsellProducts();
+        if (items.length > 0) loadCartRecommendations(items);
 
     } catch (e) {
         // Initial load failed — show empty state rather than a broken UI.
@@ -409,68 +412,53 @@ function proceedToCheckout() {
 }
 
 
-// ── Load Upsell Products ───────────────────────────────────
-async function loadUpsellProducts() {
+// ── Load Cart Recommendations ──────────────────────────────
+async function loadCartRecommendations(items) {
     try {
-        const res      = await API.get('/api/products/featured?per_page=3');
-        const products = res.data?.products || [];
+        const params = new URLSearchParams({ context: 'cart' });
+        // Use category_id from first cart item if available
+        const firstCategoryId = items[0]?.category_id;
+        if (firstCategoryId) params.set('category_id', firstCategoryId);
+
+        const res  = await API.get('/api/products/suggest?' + params);
+        const data = res.data;
+        const recs = data?.recommendations || [];
+
+        if (recs.length === 0) {
+            document.getElementById('upsell-section').style.display = 'none';
+            return;
+        }
+
+        document.getElementById('upsell-subtitle').textContent =
+            data.type === 'personal'
+                ? 'Based on your purchase history'
+                : 'Customers also bought';
+
         const container = document.getElementById('upsell-products');
-        container.innerHTML = '';
-
-        products.slice(0, 3).forEach(p => {
-            const variant = p.variants?.[0];
-            const price   = variant
-                ? parseFloat(variant.sale_price || variant.price)
-                : parseFloat(p.base_price);
-            const image   = p.images?.[0]?.image_url || '/static/images/placeholder.png';
-
-            container.innerHTML += `
-                <div style="display:flex; gap:var(--space-3); align-items:center;
-                            padding:var(--space-3); border:1px solid var(--color-border);
-                            border-radius:var(--radius-md); background:var(--color-bg-card);
-                            min-width:0">
-                    <a href="/product/${p.slug}">
-                        <img src="${image}" alt="${p.name}"
-                             style="width:56px; height:56px; object-fit:cover;
-                                    border-radius:var(--radius-sm)"
-                             onerror="this.src='/static/images/placeholder.png'">
-                    </a>
-                    <div style="flex:1; min-width:0">
-                        <a href="/product/${p.slug}"
-                           style="font-size:var(--text-sm); font-weight:var(--weight-medium);
-                                  color:var(--color-text); text-decoration:none;
-                                  display:-webkit-box; -webkit-line-clamp:1;
-                                  -webkit-box-orient:vertical; overflow:hidden">
-                            ${p.name}
-                        </a>
-                        <div class="price" style="font-size:var(--text-sm)">
-                            ₹${price.toFixed(2)}
+        container.innerHTML = recs.map(p => `
+            <a href="/product/${p.slug || p.id}" class="product-card" style="text-decoration:none">
+                <div class="product-card-image">
+                    <img src="${p.primary_image || '/static/images/placeholder.png'}"
+                         alt="${p.name}" loading="lazy"
+                         onerror="this.src='/static/images/placeholder.png'">
+                </div>
+                <div class="product-card-body">
+                    <div class="product-card-category">${p.category_name || ''}</div>
+                    <div class="product-card-name">${p.name}</div>
+                    <div class="product-card-footer">
+                        <div class="product-card-price">
+                            ${p.sale_price
+                                ? `<span class="price price-sale">₹${parseFloat(p.sale_price).toFixed(2)}</span>
+                                   <span class="price-original">₹${parseFloat(p.price).toFixed(2)}</span>`
+                                : `<span class="price">₹${parseFloat(p.price).toFixed(2)}</span>`
+                            }
                         </div>
                     </div>
-                    <button
-                        class="btn btn-primary btn-sm"
-                        onclick="quickAddUpsell(${variant?.id}, '${p.name}')"
-                    >
-                        <i class="ph ph-plus"></i>
-                    </button>
                 </div>
-            `;
-        });
+            </a>
+        `).join('');
     } catch (e) {
         document.getElementById('upsell-section').style.display = 'none';
-    }
-}
-
-
-// ── Quick Add Upsell ───────────────────────────────────────
-async function quickAddUpsell(variantId, productName) {
-    if (!variantId) return;
-    try {
-        await Cart.addItem(variantId, 1);
-        showToast(`${productName} added! 🛒`);
-        await loadCart();
-    } catch (err) {
-        showToast(err.message || 'Failed to add item', 'error');
     }
 }
 

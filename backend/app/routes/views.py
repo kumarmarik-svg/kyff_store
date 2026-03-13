@@ -150,6 +150,13 @@ def admin_banners():
         active_page = 'banners')
 
 
+@views_bp.route('/admin/images')
+def admin_images():
+    return render_template('admin/images.html',
+        page_title  = 'Image Manager',
+        active_page = 'images')
+
+
 # ── Fallback ───────────────────────────────────────────────
 
 @views_bp.route('/404')

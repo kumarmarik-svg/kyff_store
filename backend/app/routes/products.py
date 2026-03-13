@@ -1,11 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from sqlalchemy import func, exists
 from datetime import datetime, timedelta
 from ..extensions import db
 from ..models import (
     Product, ProductVariant, ProductImage,
-    Category, User, Order, OrderItem
+    Category, User, Order, OrderItem, Cart, CartItem
 )
 
 # ── Blueprint ─────────────────────────────────────────────────
@@ -29,35 +29,39 @@ def _get_trending(limit=5):
     Returns top N products by order count in last 30 days.
     Used as fallback for new/guest customers.
     """
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    try:
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
 
-    trending = (
-        db.session.query(
-            Product,
-            func.count(OrderItem.id).label("order_count")
+        trending = (
+            db.session.query(
+                Product,
+                func.count(OrderItem.id).label("order_count")
+            )
+            .join(ProductVariant, ProductVariant.product_id == Product.id)
+            .join(OrderItem, OrderItem.variant_id == ProductVariant.id)
+            .join(Order, Order.id == OrderItem.order_id)
+            .filter(
+                Product.is_active == True,
+                Order.created_at >= thirty_days_ago,
+                Order.status.notin_(["cancelled", "refunded"])
+            )
+            .group_by(Product.id)
+            .order_by(func.count(OrderItem.id).desc())
+            .limit(limit)
+            .all()
         )
-        .join(ProductVariant, ProductVariant.product_id == Product.id)
-        .join(OrderItem, OrderItem.variant_id == ProductVariant.id)
-        .join(Order, Order.id == OrderItem.order_id)
-        .filter(
-            Product.is_active == True,
-            Order.created_at >= thirty_days_ago,
-            Order.status.notin_(["cancelled", "refunded"])
-        )
-        .group_by(Product.id)
-        .order_by(func.count(OrderItem.id).desc())
-        .limit(limit)
-        .all()
-    )
 
-    return [
-        {
-            **product.to_dict(include_variants=True, include_images=True),
-            "order_count": count,
-            "reason":      "trending"
-        }
-        for product, count in trending
-    ]
+        return [
+            {
+                **product.to_dict(include_variants=True, include_images=True),
+                "order_count": count,
+                "reason":      "trending"
+            }
+            for product, count in trending
+        ]
+    except Exception as e:
+        current_app.logger.error(f"Trending query error: {e}")
+        return []
 
 
 # ── Internal: Check Price Drop ─────────────────────────────────
@@ -91,68 +95,74 @@ def _get_personal_recommendations(user_id, limit=5):
     Each product includes price drop info if applicable.
     Fills remaining slots with trending if history is short.
     """
-    # ── Fetch user's top frequently ordered variants ───────────
-    top_items = (
-        db.session.query(
-            OrderItem.variant_id,
-            OrderItem.product_name,
-            func.sum(OrderItem.quantity).label("total_qty"),
-            func.max(OrderItem.unit_price).label("last_paid_price")
+    try:
+        # ── Fetch user's top frequently ordered variants ───────────
+        # Only select + group by variant_id to satisfy MySQL only_full_group_by.
+        rows = (
+            db.session.query(
+                OrderItem.variant_id,
+                func.sum(OrderItem.quantity).label("total_qty")
+            )
+            .join(Order, Order.id == OrderItem.order_id)
+            .filter(
+                Order.user_id == user_id,
+                Order.status.notin_(["cancelled", "refunded"]),
+                OrderItem.variant_id.isnot(None)
+            )
+            .group_by(OrderItem.variant_id)
+            .order_by(func.sum(OrderItem.quantity).desc())
+            .limit(limit)
+            .all()
         )
-        .join(Order, Order.id == OrderItem.order_id)
-        .filter(
-            Order.user_id == user_id,
-            Order.status.notin_(["cancelled", "refunded"])
-        )
-        .group_by(OrderItem.variant_id)
-        .order_by(func.sum(OrderItem.quantity).desc())
-        .limit(limit)
-        .all()
-    )
 
-    results      = []
-    seen_product_ids = set()
+        # Build qty lookup keyed by variant_id
+        qty_by_variant = {row.variant_id: int(row.total_qty) for row in rows}
 
-    for item in top_items:
-        variant = ProductVariant.query.get(item.variant_id)
-        if not variant or not variant.is_active:
-            continue
+        results          = []
+        seen_product_ids = set()
 
-        product = variant.product
-        if not product or not product.is_active:
-            continue
+        for row in rows:
+            try:
+                variant = ProductVariant.query.get(row.variant_id)
+                if not variant or not variant.is_active:
+                    continue
 
-        # Avoid duplicate products from different variants
-        if product.id in seen_product_ids:
-            continue
-        seen_product_ids.add(product.id)
+                product = variant.product
+                if not product or not product.is_active:
+                    continue
 
-        # Check price drop
-        price_drop = _check_price_drop(item.variant_id, item.last_paid_price)
+                # Avoid duplicate products from different variants
+                if product.id in seen_product_ids:
+                    continue
+                seen_product_ids.add(product.id)
 
-        results.append({
-            **product.to_dict(include_variants=True, include_images=True),
-            "reason":          "frequently_bought",
-            "times_ordered":   int(item.total_qty),
-            "last_paid_price": float(item.last_paid_price),
-            "price_drop":      price_drop
-        })
+                results.append({
+                    **product.to_dict(include_variants=True, include_images=True),
+                    "reason":        "frequently_bought",
+                    "times_ordered": qty_by_variant.get(row.variant_id, 0),
+                })
+            except Exception:
+                continue
 
-    # ── Fill remaining slots with trending ────────────────────
-    if len(results) < limit:
-        remaining = limit - len(results)
-        trending  = _get_trending(limit=remaining + 5)
+        # ── Fill remaining slots with trending ────────────────────
+        if len(results) < limit:
+            remaining = limit - len(results)
+            trending  = _get_trending(limit=remaining + 5)
 
-        for t in trending:
-            if t["id"] not in seen_product_ids:
-                t["reason"] = "trending"
-                results.append(t)
-                seen_product_ids.add(t["id"])
+            for t in trending:
+                if t["id"] not in seen_product_ids:
+                    t["reason"] = "trending"
+                    results.append(t)
+                    seen_product_ids.add(t["id"])
 
-            if len(results) >= limit:
-                break
+                if len(results) >= limit:
+                    break
 
-    return results[:limit]
+        return results[:limit]
+
+    except Exception as e:
+        current_app.logger.error(f"Personal recommendations error: {e}")
+        return _get_trending(limit=limit)
 
 
 # ── GET /api/products ─────────────────────────────────────────
@@ -407,22 +417,147 @@ def recommendations():
     Header (optional):
         Authorization: Bearer <access_token>
     """
-    # ── Try to get user from token — optional auth ─────────────
+    try:
+        # ── Try to get user from token — optional auth ─────────────
+        user_id = None
+        try:
+            verify_jwt_in_request(optional=True)
+            user_id = get_jwt_identity()
+        except Exception:
+            pass
+
+        if user_id:
+            products = _get_personal_recommendations(int(user_id), limit=5)
+            message  = "Recommended for you"
+        else:
+            products = _get_trending(limit=5)
+            message  = "Trending products"
+
+        return success(message=message, data={"products": products})
+
+    except Exception as e:
+        current_app.logger.error(f"Recommendations route error: {e}")
+        return success(message="Trending products", data={"products": []})
+
+
+# ── GET /api/products/suggest ─────────────────────────────────
+@products_bp.route("/suggest", methods=["GET"])
+def suggest():
+    """
+    "You May Also Like" recommendations for product-detail and cart pages.
+
+    Query params:
+        product_id  (int, optional) — exclude this product (product page)
+        category_id (int, optional) — for category-based fallback
+        context     (str)           — 'product' or 'cart'
+
+    Auth: optional JWT.
+        Logged-in + order history → personal (frequently bought)
+        Otherwise                 → same-category, featured-first
+    """
+    product_id  = request.args.get("product_id",  type=int)
+    category_id = request.args.get("category_id", type=int)
+
+    # ── Optional auth ──────────────────────────────────────────
     user_id = None
     try:
         verify_jwt_in_request(optional=True)
-        user_id = get_jwt_identity()
+        identity = get_jwt_identity()
+        if identity:
+            user_id = int(identity)
     except Exception:
         pass
 
-    if user_id:
-        products = _get_personal_recommendations(int(user_id), limit=5)
-        message  = "Recommended for you"
-    else:
-        products = _get_trending(limit=5)
-        message  = "Trending products"
+    # ── Build exclusion list ───────────────────────────────────
+    exclude_ids = []
+    if product_id:
+        exclude_ids.append(product_id)
 
-    return success(message=message, data={"products": products})
+    if user_id:
+        cart = Cart.query.filter_by(user_id=user_id).first()
+        if cart:
+            for item in cart.items.all():
+                if item.variant and item.variant.product_id not in exclude_ids:
+                    exclude_ids.append(item.variant.product_id)
+
+    # ── Logged-in: check order history ────────────────────────
+    recommendations = []
+    rec_type        = "category"
+
+    if user_id:
+        freq_rows = (
+            db.session.query(
+                ProductVariant.product_id,
+                func.count(OrderItem.id).label("buy_count")
+            )
+            .join(ProductVariant, ProductVariant.id == OrderItem.variant_id)
+            .join(Order, Order.id == OrderItem.order_id)
+            .filter(
+                Order.user_id == user_id,
+                Order.status.in_(["confirmed", "processing", "shipped", "delivered"]),
+                OrderItem.variant_id.isnot(None),
+            )
+            .group_by(ProductVariant.product_id)
+            .order_by(func.count(OrderItem.id).desc())
+            .limit(5)
+            .all()
+        )
+
+        freq_ids = [r.product_id for r in freq_rows if r.product_id not in exclude_ids]
+        if freq_ids:
+            prods = Product.query.filter(
+                Product.id.in_(freq_ids),
+                Product.is_active == True
+            ).all()
+            id_order = {pid: i for i, pid in enumerate(freq_ids)}
+            prods.sort(key=lambda p: id_order.get(p.id, 99))
+            recommendations = prods
+            rec_type = "personal"
+
+    # ── Fallback: same-category (or sitewide featured) ────────
+    if len(recommendations) < 3:
+        needed       = 6 - len(recommendations)
+        existing_ids = exclude_ids + [p.id for p in recommendations]
+
+        q = Product.query.filter(Product.is_active == True)
+        if existing_ids:
+            q = q.filter(~Product.id.in_(existing_ids))
+        if category_id:
+            q = q.filter(Product.category_id == category_id)
+
+        fallback = q.order_by(
+            Product.is_featured.desc(),
+            Product.created_at.desc()
+        ).limit(needed).all()
+
+        recommendations += fallback
+        if rec_type != "personal":
+            rec_type = "category"
+
+    # ── Serialize ──────────────────────────────────────────────
+    def _fmt(p):
+        variants   = p.active_variants()
+        variant    = variants[0] if variants else None
+        price      = float(variant.price)      if variant else float(p.base_price)
+        sale_price = float(variant.sale_price) if (variant and variant.sale_price) else None
+        img        = p.primary_image()
+        return {
+            "id":            p.id,
+            "name":          p.name,
+            "slug":          p.slug,
+            "primary_image": img.image_url if img else "/static/images/placeholder.png",
+            "price":         price,
+            "sale_price":    sale_price,
+            "category_name": p.category.name if p.category else "",
+        }
+
+    return success(
+        message = "Suggestions",
+        data    = {
+            "recommendations": [_fmt(p) for p in recommendations[:6]],
+            "type":            rec_type,
+        }
+    )
 
 
 # ── GET /api/products/price-drops ────────────────────────────
