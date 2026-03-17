@@ -34,34 +34,36 @@
 <nav class="navbar">
     <div class="container navbar-inner">
 
-        <!-- Mobile Menu Toggle -->
-        <button class="navbar-toggle show-mobile" onclick="toggleDrawer()" aria-label="Menu">
-            <i class="ph ph-list"></i>
-        </button>
+        <!-- Left: hamburger + logo always together on left -->
+        <div style="display:flex; align-items:center; gap:var(--space-2); flex-shrink:0;">
+            <button class="navbar-toggle show-mobile" onclick="toggleDrawer()" aria-label="Menu">
+                <i class="ph ph-list"></i>
+            </button>
+            <a href="/" class="navbar-logo">
+                <img src="/static/images/products/kyff.png" alt="KYFF"
+                     style="height:40px; width:auto; object-fit:contain">
+            </a>
+        </div>
 
-        <!-- Logo -->
-        <a href="/" class="navbar-logo">
-            <img src="/static/images/products/kyff.png" alt="KYFF"
-                 style="height:40px; width:auto; object-fit:contain">
-        </a>
-
-        <!-- Search — hidden on mobile -->
-        <div class="navbar-search hide-mobile">
-            <i class="ph ph-magnifying-glass navbar-search-icon"></i>
-            <input
-                type="search"
-                id="search-input"
-                placeholder="Search millets, oils, spices..."
-                autocomplete="off"
-                onkeydown="handleSearch(event)"
-            >
+        <!-- Search bar: flex child between logo and actions, fills middle only -->
+        <div id="header-search-bar" style="display:none; flex:1; align-items:center; padding:0 var(--space-3);">
+            <div class="navbar-search" style="flex:1; max-width:none;">
+                <i class="ph ph-magnifying-glass navbar-search-icon"></i>
+                <input
+                    type="search"
+                    id="search-input"
+                    placeholder="Search by product name"
+                    autocomplete="off"
+                    onkeydown="handleSearch(event)"
+                >
+            </div>
         </div>
 
         <!-- Actions -->
         <div class="navbar-actions">
 
-            <!-- Search icon — mobile only -->
-            <button class="navbar-icon-btn show-mobile" onclick="toggleMobileSearch()" aria-label="Search">
+            <!-- Search icon — all screen sizes -->
+            <button class="navbar-icon-btn" id="search-toggle-btn" onclick="toggleSearch()" aria-label="Search">
                 <i class="ph ph-magnifying-glass"></i>
             </button>
 
@@ -87,20 +89,6 @@
         </div>
     </div>
 </nav>
-
-<!-- Mobile Search Bar (slides in) -->
-<div id="mobile-search-bar" style="display:none; background:var(--color-bg-card); padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-    <div class="navbar-search" style="max-width:100%">
-        <i class="ph ph-magnifying-glass navbar-search-icon"></i>
-        <input
-            type="search"
-            id="mobile-search-input"
-            placeholder="Search products..."
-            autocomplete="off"
-            onkeydown="handleSearch(event)"
-        >
-    </div>
-</div>
 
 <!-- Mobile Drawer Overlay -->
 <div class="drawer-overlay" id="drawer-overlay" onclick="toggleDrawer()"></div>
@@ -269,20 +257,44 @@ function toggleDrawer() {
     document.body.style.overflow = drawer.classList.contains('open') ? 'hidden' : '';
 }
 
-// ── Mobile Search ──────────────────────────────────────────
-function toggleMobileSearch() {
-    const bar = document.getElementById('mobile-search-bar');
-    bar.style.display = bar.style.display === 'none' ? 'block' : 'none';
-    if (bar.style.display === 'block') {
-        document.getElementById('mobile-search-input').focus();
+// ── Search Toggle ──────────────────────────────────────────
+function toggleSearch() {
+    const bar    = document.getElementById('header-search-bar');
+    const icon   = document.querySelector('#search-toggle-btn i');
+    const isOpen = bar.style.display !== 'none';
+    if (isOpen) {
+        bar.style.display = 'none';
+        document.getElementById('search-input').value = '';
+        icon.className = 'ph ph-magnifying-glass';
+    } else {
+        bar.style.display = 'flex';
+        icon.className = 'ph ph-x';
+        document.getElementById('search-input').focus();
     }
 }
 
 // ── Search Handler ─────────────────────────────────────────
 function handleSearch(event) {
-    if (event.key === 'Enter') {
-        const q = event.target.value.trim();
-        if (q) window.location.href = `/products?q=${encodeURIComponent(q)}`;
+    if (event.key === 'Escape') {
+        document.getElementById('header-search-bar').style.display = 'none';
+        document.getElementById('search-input').value = '';
+        document.querySelector('#search-toggle-btn i').className = 'ph ph-magnifying-glass';
+        return;
+    }
+    if (event.key !== 'Enter') return;
+    const q = event.target.value.trim();
+    if (q.length < 2) return;
+    // Close search bar after triggering search
+    document.getElementById('header-search-bar').style.display = 'none';
+    document.getElementById('search-input').value = '';
+    document.querySelector('#search-toggle-btn i').className = 'ph ph-magnifying-glass';
+    // On the products page: in-page search, switch to All Products tab
+    if (window.location.pathname === '/products' && typeof selectCategory === 'function') {
+        state.q = q;
+        selectCategory('');   // switches nav tab to All Products, calls applyFilters()
+    } else {
+        // Other pages: navigate to products with search query
+        window.location.href = `/products?q=${encodeURIComponent(q)}`;
     }
 }
 

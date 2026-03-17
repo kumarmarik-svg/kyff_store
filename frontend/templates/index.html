@@ -476,7 +476,7 @@ async function loadRecommendations() {
             subtitle.textContent = 'Based on your purchase history';
         }
 
-        const products = data?.recommendations || [];
+        const products = data?.products || [];
         container.innerHTML = '';
 
         products.slice(0, 4).forEach(item => {

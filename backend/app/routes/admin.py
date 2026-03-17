@@ -222,10 +222,13 @@ def list_orders():
     status   = request.args.get("status",   None)
     search   = request.args.get("search",   "").strip()
 
-    query = Order.query
+    query = (
+        db.session.query(Order, User)
+        .outerjoin(User, User.id == Order.user_id)
+    )
 
     if status:
-        query = query.filter_by(status=status)
+        query = query.filter(Order.status == status)
 
     if search:
         query = query.filter(
@@ -242,10 +245,16 @@ def list_orders():
         .paginate(page=page, per_page=per_page, error_out=False)
     )
 
+    orders = []
+    for order, user in paginated.items:
+        d = order.to_dict(include_items=True)
+        d["customer"] = user.name if user else "Guest"
+        orders.append(d)
+
     return success(
         message = "Orders fetched",
         data    = {
-            "orders": [o.to_dict(include_items=True) for o in paginated.items],
+            "orders": orders,
             "pagination": {
                 "page":        paginated.page,
                 "per_page":    paginated.per_page,

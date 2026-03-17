@@ -124,9 +124,9 @@ async function loadOrders() {
         tbody.innerHTML = orders.map(o => `
             <tr>
                 <td><strong>${o.order_number}</strong></td>
-                <td>${o.user?.name || 'Guest'}<br>
+                <td>${o.customer || 'Guest'}<br>
                     <span style="font-size:var(--text-xs); color:var(--color-text-muted)">
-                        ${o.user?.email || ''}
+                        ${o.shipping_phone || ''}
                     </span>
                 </td>
                 <td>${formatDate(o.created_at)}</td>

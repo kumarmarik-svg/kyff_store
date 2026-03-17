@@ -37,13 +37,22 @@ def _get_trending(limit=5):
                 Product,
                 func.count(OrderItem.id).label("order_count")
             )
-            .join(ProductVariant, ProductVariant.product_id == Product.id)
+            .join(ProductVariant,
+                (ProductVariant.product_id == Product.id) &
+                (ProductVariant.is_active == True) &
+                (ProductVariant.stock_qty > 0)
+            )
             .join(OrderItem, OrderItem.variant_id == ProductVariant.id)
             .join(Order, Order.id == OrderItem.order_id)
             .filter(
                 Product.is_active == True,
                 Order.created_at >= thirty_days_ago,
-                Order.status.notin_(["cancelled", "refunded"])
+                Order.status.in_(["confirmed", "processing", "shipped", "delivered"]),
+                exists().where(
+        
+                    (ProductVariant.is_active == True) &
+                    (ProductVariant.stock_qty > 0)
+                )
             )
             .group_by(Product.id)
             .order_by(func.count(OrderItem.id).desc())
@@ -106,7 +115,7 @@ def _get_personal_recommendations(user_id, limit=5):
             .join(Order, Order.id == OrderItem.order_id)
             .filter(
                 Order.user_id == user_id,
-                Order.status.notin_(["cancelled", "refunded"]),
+                Order.status.in_(["confirmed", "processing", "shipped", "delivered"]),
                 OrderItem.variant_id.isnot(None)
             )
             .group_by(OrderItem.variant_id)
@@ -125,6 +134,9 @@ def _get_personal_recommendations(user_id, limit=5):
             try:
                 variant = ProductVariant.query.get(row.variant_id)
                 if not variant or not variant.is_active:
+                    continue
+
+                if variant.stock_qty <= 0:
                     continue
 
                 product = variant.product

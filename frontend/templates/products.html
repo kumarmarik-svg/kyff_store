@@ -206,11 +206,6 @@ function initFromURL() {
         if (allLink) allLink.classList.remove('active');
     }
 
-    if (state.q) {
-        document.getElementById('page-title').textContent         = `Search: "${state.q}"`;
-        document.getElementById('breadcrumb-current').textContent = 'Search Results';
-    }
-
     // Show active filter tags immediately so UI isn't blank while products load
     updateActiveFilterTags();
 }
@@ -247,7 +242,7 @@ async function loadProducts() {
     if (state.on_sale)   params.set('sale',        'true');
     if (state.featured)  params.set('featured',    'true');
 
-    const endpoint = state.q
+    const endpoint = state.q && state.q.length >= 2
         ? `/api/products/search?${params}`
         : `/api/products/?${params}`;
 
@@ -493,8 +488,8 @@ function updateActiveFilterTags() {
     const container = document.getElementById('active-filters');
     const tags      = [];
 
-    if (state.q)        tags.push({ label: `Search: "${state.q}"`,       clear: () => { state.q = ''; applyFilters(); } });
     if (state.category) tags.push({ label: `Category: ${state.category}`, clear: () => selectCategory('') });
+    if (state.q && state.q.length >= 2) tags.push({ label: state.q, clear: () => { state.q = ''; applyFilters(); } });
     if (state.on_sale)  tags.push({ label: 'On Sale',  clear: () => { state.on_sale  = false; document.getElementById('filter-on-sale').checked  = false; applyFilters(); } });
     if (state.featured) tags.push({ label: 'Featured', clear: () => { state.featured = false; document.getElementById('filter-featured').checked = false; applyFilters(); } });
     if (state.in_stock) tags.push({ label: 'In Stock', clear: () => { state.in_stock = false; document.getElementById('filter-in-stock').checked = false; applyFilters(); } });
