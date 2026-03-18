@@ -6,6 +6,7 @@
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-yellow)
 ![Razorpay](https://img.shields.io/badge/Payment-Razorpay-blue)
+![License](https://img.shields.io/badge/License-Private-red)
 
 ---
 
@@ -82,6 +83,8 @@
 ### 🖼️ Image Pipeline
 <img width="1882" height="1037" src="https://github.com/user-attachments/assets/74cecd21-9e2b-46f1-8eda-eef2efd02927" />
 
+---
+
 ## ✨ Features
 
 ### Customer
@@ -102,6 +105,7 @@
 - 🖼️ Banner management for homepage slideshow
 - 👥 Customer management
 - ⭐ Review moderation
+- 🖼️ Image pipeline for product images
 
 ---
 
@@ -117,6 +121,8 @@
 | Email | Flask-Mail (SMTP) |
 | Migrations | Flask-Migrate (Alembic) |
 | Security | Flask-Bcrypt, Flask-CORS |
+| Validation | Marshmallow |
+| Images | Pillow |
 
 ---
 
@@ -289,6 +295,31 @@ Order statuses: `placed → confirmed → processing → shipped → delivered`
 
 ---
 
+## 🧠 Key Design Decisions
+
+| Decision | Reason |
+|---|---|
+| Single Flask app serves UI + API | Simplifies deployment — no separate frontend server |
+| Guest cart uses `sessionStorage` | Avoids stale carts across sessions — clears on tab close |
+| Soft delete for products | Preserves order history integrity |
+| `OrderItem` stores price snapshot | Prevents pricing inconsistency if price changes later |
+| Token auto-refresh in `api.js` | Seamless UX — user never forced to re-login mid-session |
+| JOIN condition over EXISTS subquery | Better performance for stock filtering in trending queries |
+| Recommendations use only confirmed orders | Pending/expired orders don't count as genuine purchases |
+
+---
+
+## ⚡ Challenges & Learnings
+
+- **Guest cart merging** — merging without duplication on login
+- **Razorpay webhook** — preventing duplicate payment updates via idempotency
+- **Stock validation** — atomic check before order placement to avoid overselling
+- **Token refresh** — silent auto-refresh without breaking ongoing UX
+- **MySQL only_full_group_by** — handled by selective GROUP BY in recommendation queries
+- **Security audit** — fixed CORS wildcard, weak secrets, debug mode before deployment
+
+---
+
 ## 🌐 Deployment Checklist
 
 - [ ] Set `FLASK_DEBUG=0`
@@ -296,7 +327,7 @@ Order statuses: `placed → confirmed → processing → shipped → delivered`
 - [ ] Set `CORS_ORIGINS` to your actual domain
 - [ ] Switch from `python run.py` to Gunicorn
 - [ ] Add rate limiting on auth routes (Flask-Limiter)
-- [ ] Move refresh token to httpOnly cookie
+- [ ] Move refresh token to httpOnly cookie + save in DB
 
 ---
 
@@ -315,6 +346,8 @@ razorpay==1.4.2
 python-dotenv==1.0.1
 Pillow==10.4.0
 python-slugify==8.0.4
+marshmallow==3.21.3
+APScheduler==3.11.2
 ```
 
 ---
@@ -322,36 +355,17 @@ python-slugify==8.0.4
 ## 🗄️ Database
 
 - MySQL with `utf8mb4` encoding — supports Tamil (`name_ta` fields on Product and Category)
-- 15 models: User, Address, Category, Product, ProductVariant, ProductImage, Cart, CartItem, Order, OrderItem, Payment, Review, Banner, ShippingRule, PasswordResetToken
+- 15 models: `User, Address, Category, Product, ProductVariant, ProductImage, Cart, CartItem, Order, OrderItem, Payment, Review, Banner, ShippingRule, PasswordResetToken`
 - Products are **soft-deleted** (`is_active=False`) — never hard-deleted to preserve order history
 
 ---
 
-## 🧠 Key Design Decisions
-
-- Single Flask app serves both UI + API → simplifies deployment
-- Guest cart uses sessionStorage → avoids stale carts across sessions
-- Soft delete for products → preserves order history integrity
-- OrderItem stores price snapshot → prevents pricing inconsistency
-- Token auto-refresh → seamless UX without forcing re-login
-
----
-
-## ⚡ Challenges & Learnings
-
-- Handling guest cart → merging without duplication
-- Razorpay webhook → preventing duplicate payment updates
-- Stock validation → avoiding overselling
-- Token refresh → seamless auth without breaking UX
-
----
-
-## 👨‍💻 AI-assisted development using Claude (Anthropic)
+## 👨‍💻 Built With
 
 - **Backend:** Flask + SQLAlchemy + MySQL
 - **Frontend:** Jinja2 + Vanilla JS (no React/Vue — lightweight and fast)
 - **Payment:** Razorpay (UPI, Cards, Net Banking, COD)
-- **AI-assisted development:** Built using Claude AI (Anthropic)
+- **AI-assisted development:** Built using [Claude AI](https://claude.ai) (Anthropic)
 
 ---
 
