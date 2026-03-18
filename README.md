@@ -15,7 +15,15 @@
 |---|---|---|---|
 | Featured products, trending, categories | Filter, search, sort | Address + Razorpay payment | Status timeline |
 
+Home Page
+
 <img width="1911" height="924" alt="image" src="https://github.com/user-attachments/assets/c042e23a-3bbd-456d-b6ec-8ce88f4f6dc0" />
+<img width="1665" height="714" alt="image" src="https://github.com/user-attachments/assets/6247bca9-f2b4-4645-afcb-ac5ac2dff692" />
+<img width="1524" height="766" alt="image" src="https://github.com/user-attachments/assets/e4829f87-0ebf-4d8f-87d6-94e5faa75caf" />
+<img width="861" height="785" alt="image" src="https://github.com/user-attachments/assets/f172aef3-17dc-4fd9-82b3-c3931bc48920" />
+
+
+
 
 
 
