@@ -16,16 +16,58 @@
 | Featured products, trending, categories | Filter, search, sort | Address + Razorpay payment | Status timeline |
 
 Home Page
-
 <img width="1911" height="924" alt="image" src="https://github.com/user-attachments/assets/c042e23a-3bbd-456d-b6ec-8ce88f4f6dc0" />
 <img width="1665" height="714" alt="image" src="https://github.com/user-attachments/assets/6247bca9-f2b4-4645-afcb-ac5ac2dff692" />
 <img width="1524" height="766" alt="image" src="https://github.com/user-attachments/assets/e4829f87-0ebf-4d8f-87d6-94e5faa75caf" />
 <img width="861" height="785" alt="image" src="https://github.com/user-attachments/assets/f172aef3-17dc-4fd9-82b3-c3931bc48920" />
 
+Product Page
+<img width="1721" height="1061" alt="image" src="https://github.com/user-attachments/assets/cdaa09d7-66a2-49df-b8ec-8cb5560db993" />
 
+Cart Page
+<img width="1889" height="1062" alt="image" src="https://github.com/user-attachments/assets/f072c8d9-7ec1-44c0-b22d-0f83a4206132" />
+<img width="1727" height="786" alt="image" src="https://github.com/user-attachments/assets/3b8cc80f-fd33-4333-8c4b-c1bdafa5b0ea" />
 
+Login Page
+<img width="1692" height="1061" alt="image" src="https://github.com/user-attachments/assets/52fdc8ef-4c22-417e-b212-c6bd7667b8c9" />
 
+Checkout Page
+<img width="1793" height="1060" alt="image" src="https://github.com/user-attachments/assets/7a0dcf91-b3d0-410a-b4eb-01ad02b39b7a" />
+<img width="1713" height="402" alt="image" src="https://github.com/user-attachments/assets/2e6f6c5b-8202-4c72-9bcd-0560cbd287e4" />
+<img width="1724" height="1041" alt="image" src="https://github.com/user-attachments/assets/8d857bc0-3790-47c5-bc96-4890345a65c8" />
 
+MyOrders Page
+<img width="1806" height="1038" alt="image" src="https://github.com/user-attachments/assets/37808857-659a-42cc-9386-9a846e7d6347" />
+
+Track Order Page
+<img width="1768" height="1055" alt="image" src="https://github.com/user-attachments/assets/154dcebd-9c01-4d58-8a3e-6421762cccd8" />
+<img width="1750" height="977" alt="image" src="https://github.com/user-attachments/assets/00bbb594-0af7-4f2c-8b81-78c7d76ea03f" />
+
+Admin Panel
+
+Dashboard
+<img width="1889" height="948" alt="image" src="https://github.com/user-attachments/assets/5eb97bb2-6e83-4fcf-af47-12a5f371f097" />
+<img width="1519" height="713" alt="image" src="https://github.com/user-attachments/assets/441dc66b-a2df-4fb1-b91c-ab18700c4f0c" />
+<img width="1478" height="735" alt="image" src="https://github.com/user-attachments/assets/da1ee188-0ea1-4903-a4e6-9411a5ecc766" />
+
+Orders
+<img width="1888" height="915" alt="image" src="https://github.com/user-attachments/assets/4bdc80aa-728a-4ed9-93c4-c02879ccbc4b" />
+
+Products
+<img width="1877" height="941" alt="image" src="https://github.com/user-attachments/assets/676c9eb0-f9f0-4f97-9d9d-b31306e88e9d" />
+<img width="1068" height="889" alt="image" src="https://github.com/user-attachments/assets/2af1c4ce-b478-4aff-aeff-e0c4379e3667" />
+
+Reviews
+<img width="1835" height="1004" alt="image" src="https://github.com/user-attachments/assets/bc0abc20-8efc-4602-8fd5-01bf691f7e26" />
+
+Customers
+<img width="1869" height="921" alt="image" src="https://github.com/user-attachments/assets/3a6d95eb-2606-4cab-8579-1be560c87db2" />
+
+Banners
+<img width="1862" height="1069" alt="image" src="https://github.com/user-attachments/assets/c2bb4133-63fc-471d-bd70-33d84e784bf9" />
+
+Images
+<img width="1882" height="1037" alt="image" src="https://github.com/user-attachments/assets/74cecd21-9e2b-46f1-8eda-eef2efd02927" />
 
 ## ✨ Features
 
