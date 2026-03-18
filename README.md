@@ -327,7 +327,26 @@ python-slugify==8.0.4
 
 ---
 
-## 👨‍💻 Built With
+## 🧠 Key Design Decisions
+
+- Single Flask app serves both UI + API → simplifies deployment
+- Guest cart uses sessionStorage → avoids stale carts across sessions
+- Soft delete for products → preserves order history integrity
+- OrderItem stores price snapshot → prevents pricing inconsistency
+- Token auto-refresh → seamless UX without forcing re-login
+
+---
+
+## ⚡ Challenges & Learnings
+
+- Handling guest cart → merging without duplication
+- Razorpay webhook → preventing duplicate payment updates
+- Stock validation → avoiding overselling
+- Token refresh → seamless auth without breaking UX
+
+---
+
+## 👨‍💻 AI-assisted development using Claude (Anthropic)
 
 - **Backend:** Flask + SQLAlchemy + MySQL
 - **Frontend:** Jinja2 + Vanilla JS (no React/Vue — lightweight and fast)
