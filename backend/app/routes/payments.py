@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 from ..extensions import db
 from ..models import Order, Payment, Cart, CartItem, OrderItem, ProductVariant, WebhookEvent
+from ..utils.responses import error, success
 import hmac
 import hashlib
 import os
@@ -29,17 +30,6 @@ def get_razorpay_client():
 
     import razorpay
     return razorpay.Client(auth=(key_id, key_secret))
-
-
-# ── Helpers ───────────────────────────────────────────────────
-def error(message, code=400):
-    return jsonify({"success": False, "message": message}), code
-
-def success(message, data=None, code=200):
-    response = {"success": True, "message": message}
-    if data:
-        response["data"] = data
-    return jsonify(response), code
 
 
 # ── POST /api/payments/initiate ───────────────────────────────
@@ -190,6 +180,13 @@ def verify_payment():
 
     if not payment:
         return error("Payment record not found", 404)
+
+    # ── Idempotency check ─────────────────────────────────────
+    if payment.status == "success":
+        return success(
+            message = "Payment already verified",
+            data    = {"order_number": payment.order.order_number}
+        )
 
     # ── Verify signature ──────────────────────────────────────
     key      = os.getenv("RAZORPAY_KEY_SECRET", "").encode("utf-8")
@@ -385,6 +382,10 @@ def razorpay_webhook():
 
             if not payment:
                 return jsonify({"status": "ignored"}), 200
+
+            # IDEMPOTENCY CHECK
+            if payment.status == "refunded":
+                return jsonify({"status": "ok"}), 200
 
             # Store refund details inside the existing payment row —
             # never create a new row.

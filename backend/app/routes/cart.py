@@ -4,20 +4,10 @@ import secrets
 
 from ..extensions import db
 from ..models import Cart, CartItem, ProductVariant, Product
+from ..utils.responses import error, success
 
 # ── Blueprint ─────────────────────────────────────────────────
 cart_bp = Blueprint("cart", __name__, url_prefix="/api/cart")
-
-
-# ── Helpers ───────────────────────────────────────────────────
-def error(message, code=400):
-    return jsonify({"success": False, "message": message}), code
-
-def success(message, data=None, code=200):
-    response = {"success": True, "message": message}
-    if data:
-        response["data"] = data
-    return jsonify(response), code
 
 
 # ── Internal: Get or Create Cart ──────────────────────────────
@@ -125,19 +115,20 @@ def get_cart():
     except Exception:
         pass
 
-    cart, new_token = _get_or_create_cart(
-        user_id       = int(user_id) if user_id else None,
-        session_token = session_token
-    )
+    # Look up existing cart — never create on GET
+    cart = None
+    if user_id:
+        cart = Cart.query.filter_by(user_id=int(user_id)).first()
+    elif session_token:
+        cart = Cart.query.filter_by(session_token=session_token).first()
 
-    response_data = _cart_response(cart)
+    if not cart:
+        return success(
+            message = "Cart fetched",
+            data    = {"cart_id": None, "total_items": 0, "subtotal": 0.0, "items": []},
+        )
 
-    # If new guest cart was created, return the token
-    # Frontend must store this in localStorage
-    if new_token:
-        response_data["session_token"] = new_token
-
-    return success(message="Cart fetched", data=response_data)
+    return success(message="Cart fetched", data=_cart_response(cart))
 
 
 # ── POST /api/cart/add ────────────────────────────────────────

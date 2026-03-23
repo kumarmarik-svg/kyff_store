@@ -15,20 +15,10 @@ from ..models import (
 )
 from werkzeug.utils import secure_filename
 from flask import request, jsonify, current_app
+from ..utils.responses import error, success
 
 # ── Blueprint ─────────────────────────────────────────────────
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
-
-
-# ── Helpers ───────────────────────────────────────────────────
-def error(message, code=400):
-    return jsonify({"success": False, "message": message}), code
-
-def success(message, data=None, code=200):
-    response = {"success": True, "message": message}
-    if data:
-        response["data"] = data
-    return jsonify(response), code
 
 
 # ── Admin Guard ───────────────────────────────────────────────

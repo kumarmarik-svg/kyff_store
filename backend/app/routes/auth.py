@@ -11,23 +11,10 @@ import secrets
 from ..extensions import db, bcrypt
 from ..models import User, PasswordResetToken, Address
 from ..utils.email import send_reset_email
+from ..utils.responses import error, success
 
 # ── Blueprint ─────────────────────────────────────────────────
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
-
-
-# ── Helper ────────────────────────────────────────────────────
-def error(message, code=400):
-    """Shortcut for returning JSON error responses."""
-    return jsonify({"success": False, "message": message}), code
-
-
-def success(message, data=None, code=200):
-    """Shortcut for returning JSON success responses."""
-    response = {"success": True, "message": message}
-    if data:
-        response["data"] = data
-    return jsonify(response), code
 
 
 # ── POST /api/auth/register ───────────────────────────────────

@@ -1,20 +1,10 @@
 from flask import Blueprint, request, jsonify
 from ..extensions import db
 from ..models import Category, Product
+from ..utils.responses import error, success
 
 # ── Blueprint ─────────────────────────────────────────────────
 categories_bp = Blueprint("categories", __name__, url_prefix="/api/categories")
-
-
-# ── Helpers ───────────────────────────────────────────────────
-def error(message, code=400):
-    return jsonify({"success": False, "message": message}), code
-
-def success(message, data=None, code=200):
-    response = {"success": True, "message": message}
-    if data:
-        response["data"] = data
-    return jsonify(response), code
 
 
 # ── GET /api/categories ───────────────────────────────────────

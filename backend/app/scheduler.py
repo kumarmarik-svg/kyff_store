@@ -63,6 +63,44 @@ def _expire_stale_orders(app):
             )
 
 
+def _cleanup_guest_carts(app):
+    """
+    Deletes abandoned guest carts older than 7 days.
+    A guest cart has user_id IS NULL and session_token IS NOT NULL.
+    Runs daily (every 24 hours).
+    """
+    with app.app_context():
+        from datetime import timedelta
+        from .extensions import db
+        from .models import Cart, CartItem
+
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        old_carts = Cart.query.filter(
+            Cart.user_id.is_(None),
+            Cart.session_token.isnot(None),
+            Cart.updated_at < cutoff
+        ).all()
+
+        if not old_carts:
+            return
+
+        old_cart_ids = [c.id for c in old_carts]
+
+        CartItem.query.filter(
+            CartItem.cart_id.in_(old_cart_ids)
+        ).delete(synchronize_session=False)
+
+        Cart.query.filter(
+            Cart.id.in_(old_cart_ids)
+        ).delete(synchronize_session=False)
+
+        db.session.commit()
+        print(
+            f"[scheduler] {datetime.utcnow().isoformat()} — "
+            f"cleaned up {len(old_cart_ids)} abandoned guest cart(s)"
+        )
+
+
 def init_scheduler(app):
     """
     Creates and starts the background scheduler.
@@ -81,6 +119,14 @@ def init_scheduler(app):
         trigger          = "interval",
         minutes          = 5,
         id               = "expire_stale_orders",
+        replace_existing = True,
+    )
+    scheduler.add_job(
+        func             = _cleanup_guest_carts,
+        args             = [app],
+        trigger          = "interval",
+        hours            = 24,
+        id               = "cleanup_guest_carts",
         replace_existing = True,
     )
     scheduler.start()

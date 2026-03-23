@@ -7,20 +7,10 @@ from ..models import (
     Order, OrderItem, Cart, CartItem,
     ProductVariant, Address, ShippingRule, Payment
 )
+from ..utils.responses import error, success
 
 # ── Blueprint ─────────────────────────────────────────────────
 orders_bp = Blueprint("orders", __name__, url_prefix="/api/orders")
-
-
-# ── Helpers ───────────────────────────────────────────────────
-def error(message, code=400):
-    return jsonify({"success": False, "message": message}), code
-
-def success(message, data=None, code=200):
-    response = {"success": True, "message": message}
-    if data:
-        response["data"] = data
-    return jsonify(response), code
 
 
 def _address_to_shipping(address):

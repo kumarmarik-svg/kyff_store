@@ -2,20 +2,10 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..extensions import db
 from ..models import Address
+from ..utils.responses import error, success
 
 # ── Blueprint ─────────────────────────────────────────────────
 addresses_bp = Blueprint("addresses", __name__, url_prefix="/api/addresses")
-
-
-# ── Helpers ───────────────────────────────────────────────────
-def error(message, code=400):
-    return jsonify({"success": False, "message": message}), code
-
-def success(message, data=None, code=200):
-    response = {"success": True, "message": message}
-    if data:
-        response["data"] = data
-    return jsonify(response), code
 
 
 # ── GET /api/addresses ────────────────────────────────────────
