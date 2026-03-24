@@ -29,10 +29,10 @@ env/
 Thumbs.db
 
 # Uploads
-frontend/static/images/products/*
-!frontend/static/images/products/.gitkeep
-frontend/static/images/banners/*
-!frontend/static/images/banners/.gitkeep
+#frontend/static/images/products/*
+#!frontend/static/images/products/.gitkeep
+#frontend/static/images/banners/*
+#!frontend/static/images/banners/.gitkeep
 
 # Logs
 *.log

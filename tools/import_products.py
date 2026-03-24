@@ -9,11 +9,11 @@ from pathlib import Path
 
 # ── CONFIG ─────────────────────────────────────────────────
 DB_CONFIG = {
-    'host'    : 'localhost',
-    'port'    : 3306,
+    'host'    : 'centerbeam.proxy.rlwy.net',
+    'port'    : 42373,
     'user'    : 'root',
-    'password': 'MySql@123',
-    'database': 'kyff_store',
+    'password': 'PtjWuAgrwXfZDaBEWcCwbvbbIyvSsnnT',
+    'database': 'railway',
     'charset' : 'utf8mb4',
 }
 
@@ -84,8 +84,8 @@ def main():
             print(f"     existing → {cat_name} (id:{existing[0]})")
         else:
             cursor.execute("""
-                INSERT INTO categories (name, slug, is_active)
-                VALUES (%s, %s, 1)
+                INSERT INTO categories (name, slug, is_active, sort_order, created_at)
+                VALUES (%s, %s, 1, 0, NOW())
             """, (cat_name, slug))
             conn.commit()
             category_ids[cat_name] = cursor.lastrowid
@@ -121,24 +121,24 @@ def main():
             cursor.execute("""
                 INSERT INTO products
                     (category_id, name, slug, description,
-                     base_price, is_active, is_featured)
-                VALUES (%s, %s, %s, %s, %s, 1, 0)
+                    base_price, is_active, is_featured, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, 1, 0, NOW(), NOW())
             """, (cat_id, name, slug, desc, price))
             product_id = cursor.lastrowid
 
             # Insert default variant
             cursor.execute("""
                 INSERT INTO product_variants
-                    (product_id, label, price, stock_qty, is_active)
-                VALUES (%s, %s, %s, %s, 1)
+                    (product_id, label, price, stock_qty, is_active, created_at)
+                VALUES (%s, %s, %s, %s, 1, NOW())
             """, (product_id, '1 Unit', price, 10))
 
             # Insert image
             if image_url:
                 cursor.execute("""
                     INSERT INTO product_images
-                        (product_id, image_url, alt_text, sort_order)
-                    VALUES (%s, %s, %s, 0)
+                        (product_id, image_url, alt_text, is_primary, sort_order, created_at)
+                    VALUES (%s, %s, %s, 1, 0, NOW())
                 """, (product_id, image_url, name))
 
             conn.commit()

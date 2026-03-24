@@ -1,7 +1,5 @@
 # ============================================================
-#  UPDATE_PRICES.PY — KYFF Store
-#  Reads PriceList Excel, matches products by name similarity,
-#  updates base_price, variant price and sale_price in MySQL
+#  UPDATE_PRICES.PY — FINAL WORKING VERSION
 # ============================================================
 
 import re
@@ -13,181 +11,156 @@ from difflib import SequenceMatcher
 
 # ── CONFIG ─────────────────────────────────────────────────
 DB_CONFIG = {
-    'host'    : 'localhost',
-    'port'    : 3306,
-    'user'    : 'root',
-    'password': 'MySql@123',
-    'database': 'kyff_store',
-    'charset' : 'utf8mb4',
+    'host': 'centerbeam.proxy.rlwy.net',
+    'port': 42373,
+    'user': 'root',
+    'password': 'PtjWuAgrwXfZDaBEWcCwbvbbIyvSsnnT',
+    'database': 'railway',
+    'charset': 'utf8mb4',
 }
 
-EXCEL_FILE  = r"C:\Projects\kyff_store\tools\PriceList_08Aug2024__1_.xlsx"
-MATCH_SCORE = 0.45   # minimum similarity to consider a match (0-1)
+EXCEL_FILE = r"C:\Projects\kyff_store\tools\PriceList_08Aug2024__1_.xlsx"
 
 
 # ── Helpers ────────────────────────────────────────────────
 def clean_name(name):
-    """Remove trailing price digits and normalize"""
-    name = re.sub(r'\s+\d+\s*$', '', str(name))   # trailing price
+    name = re.sub(r'\s+\d+\s*$', '', str(name))  # remove trailing numbers like 100g
+    name = re.sub(r'[^\w\s]', '', name)          # remove symbols
     name = re.sub(r'\s+', ' ', name).strip()
     return name.lower()
 
-def slugify(text):
-    text = text.lower().strip()
-    text = re.sub(r'[^\w\s-]', '', text)
-    text = re.sub(r'[\s_]+', '-', text)
-    return re.sub(r'-+', '-', text).strip('-')
 
 def similarity(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
-def find_best_match(price_name, db_products, threshold=MATCH_SCORE):
-    """Find best matching DB product for a price list name"""
-    best_score  = 0
-    best_product = None
-
-    pname = clean_name(price_name)
-
-    for db_id, db_name, db_slug in db_products:
-        dname = db_name.lower()
-
-        # Direct similarity
-        score = similarity(pname, dname)
-
-        # Boost if key words match
-        p_words = set(pname.split())
-        d_words = set(dname.split())
-        common  = p_words & d_words
-        if len(common) >= 2:
-            score += 0.15
-
-        if score > best_score:
-            best_score   = score
-            best_product = (db_id, db_name, db_slug, score)
-
-    if best_score >= threshold:
-        return best_product
-    return None
-
 
 # ── Main ───────────────────────────────────────────────────
 def main():
-    print("\n" + "="*65)
-    print("  💰 KYFF Price Updater")
-    print("="*65)
+    print("\n" + "="*60)
+    print("  💰 FINAL PRICE SYNC")
+    print("="*60)
 
-    # ── Connect DB ─────────────────────────────────────────
     try:
-        conn   = pymysql.connect(**DB_CONFIG)
+        conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
-        print("\n  ✅ Connected to MySQL\n")
+        print("  ✅ Connected to DB\n")
     except Exception as e:
-        print(f"\n  ❌ DB Error: {e}")
+        print(f"❌ DB Error: {e}")
         sys.exit(1)
 
-    # ── Read Excel ─────────────────────────────────────────
-    xl_path = Path(EXCEL_FILE)
-    if not xl_path.exists():
-        print(f"  ❌ Excel not found: {EXCEL_FILE}")
-        sys.exit(1)
+    # ── Load Excel ─────────────────────────────────────────
+    wb = openpyxl.load_workbook(EXCEL_FILE)
+    ws = wb.active
 
-    wb   = openpyxl.load_workbook(xl_path)
-    ws   = wb.active
-    rows = list(ws.iter_rows(values_only=True))
+    excel_map = {}
 
-    price_list = []
-    for row in rows[1:]:
-        if not row[0] or not row[3]:
+    def clean_price(val):
+        if not val:
+            return None
+        nums = re.findall(r'\d+\.?\d*', str(val))
+        return float(nums[-1]) if nums else None
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[3]:
             continue
-        name    = str(row[3]).strip()
-        #selling = float(row[4]) if row[4] else None
-        #mrp     = float(row[5]) if row[5] else None
-        def clean_price(val):
-            if not val:
-                return None
-            # Remove spaces, commas, currency symbols, take LAST number if multiple
-            import re
-            nums = re.findall(r'\d+\.?\d*', str(val).replace(',', ''))
-            return float(nums[-1]) if nums else None
 
+        name = clean_name(row[3])
         selling = clean_price(row[4])
-        mrp     = clean_price(row[5])
-        
-        if name and selling:
-            price_list.append((name, selling, mrp))
+        mrp = clean_price(row[5])
 
-    print(f"  📋 Price list rows   : {len(price_list)}")
+        if selling:
+            excel_map[name] = (selling, mrp or selling)
+
+    print(f"  📊 Excel products: {len(excel_map)}")
 
     # ── Load DB products ───────────────────────────────────
-    cursor.execute("SELECT id, name, slug FROM products WHERE is_active=1")
+    cursor.execute("SELECT id, name FROM products")
     db_products = cursor.fetchall()
-    print(f"  🛍️  DB products       : {len(db_products)}")
 
-    # ── Match & Update ─────────────────────────────────────
-    print(f"\n  🔍 Matching and updating prices...\n")
+    print(f"  🛍️ DB products: {len(db_products)}")
 
-    updated    = []
-    no_match   = []
+    matched_ids = set()
+    updated = 0
 
-    for price_name, selling, mrp in price_list:
-        match = find_best_match(price_name, db_products)
+    print("\n  🔄 Matching and updating...\n")
 
-        if not match:
-            no_match.append(price_name)
+    for db_id, db_name in db_products:
+        db_clean = clean_name(db_name)
+
+        best_match = None
+        best_score = 0
+
+        for excel_name in excel_map:
+            # strong contains check
+            if excel_name in db_clean or db_clean in excel_name:
+                score = 0.85
+            else:
+                score = similarity(db_clean, excel_name)
+
+            if score > best_score:
+                best_score = score
+                best_match = excel_name
+
+        if best_score < 0.6:
             continue
 
-        db_id, db_name, db_slug, score = match
+        selling, mrp = excel_map[best_match]
 
-        # sale_price = selling (discounted)
-        # base_price = mrp (original)
+        base_price = round(mrp, 2)
         sale_price = round(selling, 2)
-        base_price = round(mrp or selling, 2)
 
         try:
-            # Update product base_price
             cursor.execute("""
                 UPDATE products
                 SET base_price = %s
                 WHERE id = %s
             """, (base_price, db_id))
 
-            # Update variant price and sale_price
             cursor.execute("""
                 UPDATE product_variants
-                SET price      = %s,
+                SET price = %s,
                     sale_price = %s
                 WHERE product_id = %s
             """, (base_price, sale_price if sale_price < base_price else None, db_id))
 
-            conn.commit()
-            updated.append((price_name, db_name, sale_price, base_price, score))
+            matched_ids.add(db_id)
+            updated += 1
 
         except Exception as e:
-            conn.rollback()
-            no_match.append(f"{price_name} — DB error: {e}")
+            print(f"Error updating {db_name}: {e}")
 
-    # ── Report ─────────────────────────────────────────────
-    print(f"{'='*65}")
-    print(f"  ✅ PRICE UPDATE COMPLETE")
-    print(f"{'='*65}")
-    print(f"  Prices updated   : {len(updated)}")
-    print(f"  No match found   : {len(no_match)}")
-    print()
-    print(f"  {'PRICE LIST NAME':<35} {'DB PRODUCT':<25} SELL    MRP   SCORE")
-    print(f"  {'-'*90}")
-    for pname, dname, sell, mrp, score in updated:
-        pname_s = pname[:33]
-        dname_s = dname[:23]
-        print(f"  {pname_s:<35} {dname_s:<25} ₹{sell:<7} ₹{mrp:<6} {score:.2f}")
+    conn.commit()
 
-    if no_match:
-        print(f"\n  ⚠️  NO MATCH ({len(no_match)} items):")
-        for n in no_match[:20]:
-            print(f"     {n}")
-        if len(no_match) > 20:
-            print(f"     ... and {len(no_match)-20} more")
+    print(f"\n  ✅ Prices updated: {updated}")
 
-    print(f"\n{'='*65}\n")
+    # ── DELETE UNMATCHED PRODUCTS ───────────────────────────
+    print("\n  🧹 Removing unmatched products...")
+
+    if matched_ids:
+        ids_tuple = tuple(matched_ids)
+
+        cursor.execute(f"""
+            DELETE FROM product_images
+            WHERE product_id NOT IN {ids_tuple}
+        """)
+
+        cursor.execute(f"""
+            DELETE FROM product_variants
+            WHERE product_id NOT IN {ids_tuple}
+        """)
+
+        cursor.execute(f"""
+            DELETE FROM products
+            WHERE id NOT IN {ids_tuple}
+        """)
+
+        conn.commit()
+        print("  ✅ Unmatched products removed")
+
+    print("\n" + "="*60)
+    print("  🎉 FINAL SYNC COMPLETE")
+    print("="*60)
+
     cursor.close()
     conn.close()
 
