@@ -37,3 +37,6 @@ frontend/static/images/banners/*
 # Logs
 *.log
 logs/
+
+# Ngrok
+ngrok.exe
