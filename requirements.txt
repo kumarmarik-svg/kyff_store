@@ -31,3 +31,4 @@ python-slugify==8.0.4
 anthropic>=0.20.0
 
 cryptography==42.0.8
+apscheduler==3.11.2
